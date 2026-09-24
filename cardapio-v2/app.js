@@ -322,9 +322,9 @@ function renderPalco() {
   palco.innerHTML = `
     <article class="palco-card" data-abre="${esc(g.key)}" aria-label="Destaque: ${esc(g.nome)}">
       ${video
-        ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted autoplay loop playsinline preload="metadata"></video>`
+        ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted autoplay loop playsinline preload="auto" fetchpriority="high"></video>`
         : g.video
-          ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted loop playsinline preload="metadata" controls></video>`
+          ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted loop playsinline preload="auto" controls></video>`
           : `<img class="palco-media zoom" src="${esc(g.img)}" alt="">`}
       <span class="palco-selo"><i></i>${g.video ? 'Destaque da casa' : 'O mais pedido'}</span>
       ${video ? `<button class="palco-som" id="palcoSom" aria-label="Ligar som">${ICON.somOff}</button>` : ''}
@@ -341,6 +341,12 @@ function renderPalco() {
     </article>`;
   const v = $('#palcoVideo');
   if (v && video) {
+    // Injetado via innerHTML: o atributo autoplay nem sempre dispara sozinho no
+    // celular, e "preload=metadata" só baixava o cabeçalho — ficava esperando o
+    // IntersectionObserver pra buscar o vídeo de verdade. Agora tenta tocar já,
+    // e de novo assim que tiver dado suficiente (canplay), sem esperar rolagem.
+    v.play().catch(() => {});
+    v.addEventListener('canplay', () => { if (v.paused) v.play().catch(() => {}); }, { once: true });
     v.addEventListener('timeupdate', () => { const b = $('#palcoBarra'); if (b && v.duration) b.style.width = (v.currentTime / v.duration * 100) + '%'; });
     obsPalco?.disconnect();
     obsPalco = new IntersectionObserver(([e]) => { if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }, { threshold: .25 });
@@ -757,7 +763,7 @@ function renderProduto() {
   const nomeTit = g.secao === 'pizzas' && meio && sabor2 ? `½ ${g.nome} + ½ ${p.extraNome}` : g.nome;
   const img = v.imagem_url || g.img;
   const midia = g.video
-    ? `<video src="${esc(g.video)}" ${img ? `poster="${esc(img)}"` : ''} muted ${reduzMovimento() ? 'controls' : 'autoplay'} loop playsinline preload="metadata"></video>`
+    ? `<video src="${esc(g.video)}" ${img ? `poster="${esc(img)}"` : ''} muted ${reduzMovimento() ? 'controls' : 'autoplay'} loop playsinline preload="auto"></video>`
     : midiaDe(g.base, g.secao, img);
 
   $('#sheetProduto').innerHTML = `
