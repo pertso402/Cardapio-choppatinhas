@@ -1,0 +1,14 @@
+# notas internas (senha do admin, observações do banco) — ficam só local
+progress.md
+README-cliente.md
+
+# mídia original enviada pelo cliente (as versões usadas estão no Supabase Storage)
+cardapio/produtos/
+
+# ferramentas locais
+.claude/
+.vercel/
+**/.vercel/
+node_modules/
+.DS_Store
+Thumbs.db

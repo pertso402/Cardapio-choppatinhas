@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2B1B12">
+  <meta name="description" content="Choppatinhas — restaurante em Umuarama. Frango crocante, carnes na chapa e porções generosas. Peça online em poucos toques.">
+  <title>Choppatinhas — Cardápio</title>
+  <link rel="icon" href="assets/mascote.png">
+  <meta property="og:title" content="Choppatinhas — Cardápio">
+  <meta property="og:description" content="O sabor do Choppatinhas, agora na sua casa. Peça online!">
+  <meta property="og:image" content="assets/logo-original.jpg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,500;1,9..144,600;1,9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="config.js" defer></script>
+  <script src="art.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+  <!-- TOPO (faixa escura com a marca) -->
+  <header class="topo" id="topo">
+    <div class="topo-in">
+      <a class="marca" href="#" aria-label="Choppatinhas — início">
+        <img class="marca-mascote" src="assets/mascote.png" alt="" width="40" height="40">
+        <img class="marca-nome" src="assets/wordmark.png" alt="Choppatinhas" width="206" height="50">
+      </a>
+      <div class="topo-acoes">
+        <button class="topo-busca" id="btnBusca" aria-label="Buscar no cardápio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <button class="topo-sacola" id="btnSacola" aria-label="Abrir pedido">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>
+          <b id="sacolaQtd">0</b>
+          <span id="sacolaTotal">R$ 0,00</span>
+        </button>
+      </div>
+    </div>
+    <div class="busca" id="busca" hidden>
+      <input id="buscaInput" type="search" placeholder="Frango, picanha, batata…" autocomplete="off" enterkeyhint="search">
+      <button id="buscaFechar" class="busca-x">Cancelar</button>
+    </div>
+  </header>
+
+  <!-- INTRO -->
+  <section class="intro">
+    <div class="pilulas" id="pilulas"></div>
+    <h1 class="intro-titulo">O sabor do Choppatinhas, <em>agora na sua casa.</em></h1>
+  </section>
+
+  <!-- DESTAQUE EM VÍDEO -->
+  <section class="palco" id="palco" hidden></section>
+
+  <!-- FAIXA DE FOTOS -->
+  <div class="faixa" id="faixa" aria-hidden="true"><div class="faixa-trilho" id="faixaTrilho"></div></div>
+
+  <!-- ACOMPANHAR / PEDIR DE NOVO -->
+  <section class="retorno" id="retorno" hidden></section>
+
+  <!-- MAIS PEDIDOS -->
+  <section class="top" id="top" hidden>
+    <div class="cab-sec">
+      <span class="kicker">— Prova real</span>
+      <h2>Os mais pedidos</h2>
+    </div>
+    <div class="top-trilho" id="topTrilho"></div>
+  </section>
+
+  <!-- CATEGORIAS (filtro) -->
+  <nav class="cats" id="cats" aria-label="Categorias"><div class="cats-in" id="catsIn"></div></nav>
+
+  <!-- CARDÁPIO -->
+  <main class="menu" id="menu">
+    <div class="sk sk-t"></div><div class="sk sk-c"></div><div class="sk sk-c"></div>
+  </main>
+  <div class="busca-vazia" id="buscaVazia" hidden>
+    <p>Não achamos <strong id="buscaTermo"></strong> por aqui</p>
+    <span>Tenta outra palavra, tipo “frango” ou “batata”.</span>
+  </div>
+
+  <footer class="rodape">
+    <img src="assets/mascote.png" alt="" width="56" height="56">
+    <strong>Choppatinhas</strong>
+    <p id="rodapeEnd"></p>
+    <p id="rodapeHora"></p>
+    <button class="btn-admin" id="btnAdmin" aria-label="Acesso administrativo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </footer>
+
+  <!-- BARRA FLUTUANTE -->
+  <div class="barra" id="barra" hidden>
+    <button class="barra-btn" id="barraBtn">
+      <span class="barra-qtd" id="barraQtd">0</span>
+      <span class="barra-txt"><strong>Ver pedido</strong><small id="barraMeta"></small></span>
+      <span class="barra-total" id="barraTotal">R$ 0,00</span>
+      <span class="barra-prog"><i id="barraProg"></i></span>
+    </button>
+  </div>
+
+  <!-- CAMADAS -->
+  <div class="veu" id="veu"></div>
+  <section class="sheet" id="sheetProduto" role="dialog" aria-modal="true" aria-label="Produto"></section>
+  <section class="sheet sheet-combina" id="sheetCombina" role="dialog" aria-modal="true" aria-label="Combina com seu pedido"></section>
+  <section class="sheet sheet-carrinho" id="sheetCarrinho" role="dialog" aria-modal="true" aria-label="Seu pedido"></section>
+  <section class="sheet sheet-checkout" id="sheetCheckout" role="dialog" aria-modal="true" aria-label="Finalizar pedido"></section>
+  <section class="sheet sheet-status" id="sheetStatus" role="dialog" aria-modal="true" aria-label="Acompanhar pedido"></section>
+
+  <!-- ADMIN -->
+  <div class="adm-senha" id="admSenha" hidden>
+    <form class="adm-senha-box" id="admSenhaForm">
+      <img src="assets/mascote.png" alt="" width="56" height="56">
+      <h3>Área da casa</h3>
+      <p>Digite a senha do painel</p>
+      <input type="password" id="admSenhaInput" inputmode="numeric" maxlength="12" placeholder="••••" autocomplete="off">
+      <small class="adm-erro" id="admErro" hidden>Senha incorreta</small>
+      <div class="adm-senha-acoes">
+        <button type="button" class="btn-ghost" id="admCancelar">Cancelar</button>
+        <button type="submit" class="btn-cta">Entrar</button>
+      </div>
+    </form>
+  </div>
+  <section class="adm" id="adm" hidden></section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
