@@ -309,12 +309,33 @@ function grupoDoPalco() {
 }
 
 let obsPalco;
-// Tenta tocar o vídeo do destaque; se o navegador recusar (comum em navegador
-// embutido de app — WhatsApp, Instagram etc. — mesmo com o vídeo mudo), marca
-// o card pra mostrar o botão de play em vez de ficar preso numa foto parada.
+// Tenta tocar o vídeo do destaque. Navegador embutido de app (WhatsApp,
+// Instagram etc.) costuma RECUSAR autoplay de vídeo mesmo mudo — não tem como
+// nenhum site forçar isso, é o app que bloqueia. Nesses casos troca sozinho
+// pra uma animação (imagem, não vídeo): isso NUNCA é bloqueado em lugar
+// nenhum, então continua abrindo já em movimento, sem precisar de toque.
+// Só se nem a animação existir (produto sem ela ainda) é que aparece o botão
+// de tocar, como último recurso.
 function tentarTocarPalco(v) {
   const card = v.closest('.palco-card');
-  v.play().then(() => card?.classList.remove('precisa-toque')).catch(() => card?.classList.add('precisa-toque'));
+  v.play().then(() => card?.classList.remove('precisa-toque')).catch(() => usarAnimacaoDeReserva(v, card));
+}
+function usarAnimacaoDeReserva(v, card) {
+  if (!card) return;
+  const anim = card.querySelector('#palcoAnim');
+  if (!anim) { card.classList.add('precisa-toque'); return; }
+  if (!anim.hidden) { card.classList.remove('precisa-toque'); return; } // animação já assumiu — nada a fazer
+  if (card.dataset.animTentada) return; // já tem um carregamento em andamento, só aguarda
+  card.dataset.animTentada = '1';
+  anim.addEventListener('load', () => {
+    v.style.visibility = 'hidden';
+    anim.hidden = false;
+    card.classList.remove('precisa-toque');
+    card.querySelector('#palcoSom')?.setAttribute('hidden', '');
+    card.querySelector('.palco-barra')?.setAttribute('hidden', '');
+  }, { once: true });
+  anim.addEventListener('error', () => card.classList.add('precisa-toque'), { once: true });
+  anim.src = v.currentSrc.replace(/\.(mp4|webm|mov)(\?.*)?$/i, '.webp$2');
 }
 function renderPalco() {
   const g = grupoDoPalco();
@@ -330,7 +351,8 @@ function renderPalco() {
   palco.innerHTML = `
     <article class="palco-card" data-abre="${esc(g.key)}" aria-label="Destaque: ${esc(g.nome)}">
       ${video
-        ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted autoplay loop playsinline preload="auto" fetchpriority="high"></video>`
+        ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted autoplay loop playsinline preload="auto" fetchpriority="high"></video>
+           <img class="palco-media" id="palcoAnim" alt="" hidden>`
         : g.video
           ? `<video class="palco-media" id="palcoVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted loop playsinline preload="auto" controls></video>`
           : `<img class="palco-media zoom" src="${esc(g.img)}" alt="">`}
