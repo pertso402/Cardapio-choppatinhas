@@ -50,6 +50,7 @@ const reduzMovimento = () => matchMedia('(prefers-reduced-motion: reduce)').matc
 
 const ICON = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   somOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m23 9-6 6M17 9l6 6"/></svg>',
   somOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
@@ -308,6 +309,13 @@ function grupoDoPalco() {
 }
 
 let obsPalco;
+// Tenta tocar o vídeo do destaque; se o navegador recusar (comum em navegador
+// embutido de app — WhatsApp, Instagram etc. — mesmo com o vídeo mudo), marca
+// o card pra mostrar o botão de play em vez de ficar preso numa foto parada.
+function tentarTocarPalco(v) {
+  const card = v.closest('.palco-card');
+  v.play().then(() => card?.classList.remove('precisa-toque')).catch(() => card?.classList.add('precisa-toque'));
+}
 function renderPalco() {
   const g = grupoDoPalco();
   const palco = $('#palco');
@@ -328,6 +336,7 @@ function renderPalco() {
           : `<img class="palco-media zoom" src="${esc(g.img)}" alt="">`}
       <span class="palco-selo"><i></i>${g.video ? 'Destaque da casa' : 'O mais pedido'}</span>
       ${video ? `<button class="palco-som" id="palcoSom" aria-label="Ligar som">${ICON.somOff}</button>` : ''}
+      ${video ? `<button class="palco-play" id="palcoPlay" aria-label="Tocar vídeo">${ICON.play}</button>` : ''}
       <div class="palco-corpo">
         ${g.rankAnota === 0 ? '<span class="palco-chip">👑 Nº1 em pedidos</span>' : g.destaque ? '<span class="palco-chip">⭐ A casa indica</span>' : ''}
         <h2 class="palco-nome">${esc(g.nome)}</h2>
@@ -345,11 +354,14 @@ function renderPalco() {
     // celular, e "preload=metadata" só baixava o cabeçalho — ficava esperando o
     // IntersectionObserver pra buscar o vídeo de verdade. Agora tenta tocar já,
     // e de novo assim que tiver dado suficiente (canplay), sem esperar rolagem.
-    v.play().catch(() => {});
-    v.addEventListener('canplay', () => { if (v.paused) v.play().catch(() => {}); }, { once: true });
+    // Navegador embutido de app (WhatsApp, Instagram…) costuma BLOQUEAR autoplay
+    // mesmo mudo — nesse caso mostra um botão de play em vez de ficar travado
+    // numa foto com o ícone feio que o próprio navegador desenha por cima.
+    tentarTocarPalco(v);
+    v.addEventListener('canplay', () => { if (v.paused) tentarTocarPalco(v); }, { once: true });
     v.addEventListener('timeupdate', () => { const b = $('#palcoBarra'); if (b && v.duration) b.style.width = (v.currentTime / v.duration * 100) + '%'; });
     obsPalco?.disconnect();
-    obsPalco = new IntersectionObserver(([e]) => { if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }, { threshold: .25 });
+    obsPalco = new IntersectionObserver(([e]) => { if (e.isIntersecting) tentarTocarPalco(v); else v.pause(); }, { threshold: .25 });
     obsPalco.observe(v);
   }
 }
@@ -1569,6 +1581,12 @@ function eventos() {
   });
 
   document.addEventListener('click', e => {
+    if (e.target.closest('#palcoPlay')) {
+      e.stopPropagation();
+      const v = $('#palcoVideo'); if (!v) return;
+      v.play().then(() => v.closest('.palco-card')?.classList.remove('precisa-toque')).catch(() => {});
+      return;
+    }
     if (e.target.closest('#palcoSom')) {
       const v = $('#palcoVideo'); if (!v) return;
       v.muted = !v.muted; if (!v.muted) v.play().catch(() => {});

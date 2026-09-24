@@ -93,6 +93,12 @@ input, textarea, select { font: inherit; color: inherit; }
 @keyframes ping-v { 50% { opacity: .35; } }
 .palco-som { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 12, 8, .55); color: #fff; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .palco-som svg { width: 18px; height: 18px; }
+/* botão de "tocar" — só aparece quando o navegador (ex.: embutido do WhatsApp/
+   Instagram) recusa o autoplay mudo. Some sozinho assim que o vídeo começa. */
+.palco-play { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; align-items: center; justify-content: center; background: rgba(20, 12, 8, .6); border: 2px solid rgba(255, 251, 244, .85); color: #FFFBF4; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 2; transition: transform .2s var(--mola); }
+.palco-play:active { transform: translate(-50%, -50%) scale(.92); }
+.palco-play svg { width: 26px; height: 26px; margin-left: 3px; }
+.palco-card.precisa-toque .palco-play { display: flex; }
 .palco-corpo { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 18px 20px; color: #FFFBF4; }
 .palco-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 99px; background: var(--ambar); color: var(--tinta); font-size: 11.5px; font-weight: 800; margin-bottom: 10px; }
 .palco-nome { font-family: var(--f-disp); font-weight: 700; font-size: clamp(28px, 7.4vw, 44px); line-height: 1.02; letter-spacing: -.02em; }
