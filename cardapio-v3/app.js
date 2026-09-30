@@ -184,11 +184,6 @@ function agrupar() {
   }
 }
 
-function maisPedidos() {
-  return S.grupos.filter(g => g.disponivel && (g.vendas >= 3 || g.rankAnota < 99))
-    .sort((a, b) => a.rankAnota - b.rankAnota || b.vendas - a.vendas)
-    .slice(0, 6);
-}
 
 // Anotação de caneta do garçom (só com fato: ranking real, venda real, promo, destaque)
 function notaDe(g) {
@@ -488,15 +483,30 @@ function repetirPedido() {
 // ═══════════════════════════════════════════════════════════════════════════
 // OS MAIS PEDIDOS — ranking tipográfico
 // ═══════════════════════════════════════════════════════════════════════════
+// "A casa recomenda": os 3 pratos mais caros do cardápio (puxa o ticket), com
+// pelo menos um de frango. Sem bebida/acompanhamento e sem repetir o da capa.
+// Não é "mais pedidos" — por isso o título não diz isso.
+function recomendados() {
+  const capa = grupoDoPalco()?.key;
+  const topo = g => Math.max(...g.disponiveis.map(v => v.efetivo));
+  const pratos = S.grupos
+    .filter(g => g.disponivel && g.key !== capa && !['bebidas', 'acomp'].includes(g.secao))
+    .sort((a, b) => topo(b) - topo(a) || a.rankAnota - b.rankAnota);
+  const frango = pratos.find(g => /frango/i.test(g.base));
+  const lista = pratos.filter(g => g !== frango).slice(0, frango ? 2 : 3);
+  if (frango) lista.push(frango);
+  return lista.sort((a, b) => b.min - a.min || topo(b) - topo(a)); // na ordem do preço que aparece
+}
+
 function renderRanking() {
-  const lista = maisPedidos();
+  const lista = recomendados();
   const box = $('#ranking');
-  box.hidden = lista.length < 3;
+  box.hidden = !lista.length;
   if (box.hidden) return;
   box.innerHTML = `
     <header class="rk-cab">
-      <h2 class="rk-tit"><span class="encaixa" data-max="120">Os mais pedidos</span></h2>
-      <p class="rk-nota mao"><span class="sub">o ranking de verdade da casa${RAB.sublinha}</span></p>
+      <h2 class="rk-tit"><span class="encaixa" data-max="120">A casa recomenda</span></h2>
+      <p class="rk-nota mao"><span class="sub">pra quem quer o melhor da casa${RAB.sublinha}</span></p>
     </header>
     <ol class="rk-lista">${lista.map((g, i) => `
       <li class="rk-item" data-abre="${esc(g.key)}">
@@ -560,7 +570,9 @@ function itemHTML(g) {
   const q = qtdNoCarrinho(g);
   const nota = notaDe(g);
   const bebida = g.secao === 'bebidas';
-  const desc = copyDe(g) || cap(g.desc);
+  // descrição só com o item aberto (a lista fica só nome + preço). Bebida é
+  // exceção: ali a "descrição" é o tamanho (lata 350 ml, garrafa 2 L)
+  const desc = aberto || bebida ? copyDe(g) || cap(g.desc) : '';
   const marca = `<span class="it-marca mao"${q ? '' : ' hidden'}>${q}x</span>`;
   const multi = g.disponiveis.length > 1;
 
