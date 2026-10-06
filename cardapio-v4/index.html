@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#B3121B">
-  <meta name="description" content="Choppatinhas — restaurante em Umuarama. Frango crocante, carnes na chapa e porções generosas. Peça online.">
-  <title>Choppatinhas — Cardápio</title>
+  <meta name="theme-color" content="#0F0B09">
+  <meta name="description" content="Choppatinhas — restaurante em Umuarama. Monte sua mesa: frango crocante, carnes na chapa e porções generosas. Peça online.">
+  <title>Choppatinhas — Monte sua mesa</title>
   <link rel="icon" href="assets/mascote.png">
-  <meta property="og:title" content="Choppatinhas — Cardápio">
-  <meta property="og:description" content="Direto da nossa chapa pra sua mesa. Peça online!">
+  <meta property="og:title" content="Choppatinhas — Monte sua mesa">
+  <meta property="og:description" content="Escolha pra quantas pessoas e a gente te ajuda a montar o pedido.">
   <meta property="og:image" content="assets/logo-original.jpg">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cvukucgofhappavupaij.supabase.co" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:opsz,wght@10..72,700;10..72,800;10..72,900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
@@ -23,89 +23,88 @@
   <script src="app.js" defer></script>
 </head>
 <body>
+<div class="app" id="app">
 
-  <div class="pagina">
+  <header class="topo">
+    <h1 class="sr">Choppatinhas — monte sua mesa</h1>
+    <button class="marca" id="btnInicio" aria-label="Voltar ao início">
+      <img class="marca-pato" src="assets/mascote.png" alt="" width="34" height="34">
+      <img class="marca-nome" src="assets/wordmark.png" alt="Choppatinhas" width="206" height="50">
+    </button>
+    <span class="topo-status" id="topoStatus"></span>
+    <button class="topo-busca" id="btnBusca" aria-label="Buscar no cardápio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8" stroke-linecap="round"/></svg>
+    </button>
+  </header>
 
-    <!-- TOPO -->
-    <header class="topo">
-      <h1 class="sr">Cardápio do Choppatinhas</h1>
-      <a class="marca" href="#" aria-label="Choppatinhas — início">
-        <img class="marca-pato" src="assets/mascote.png" alt="" width="36" height="36">
-        <img class="marca-nome" src="assets/wordmark.png" alt="Choppatinhas" width="206" height="50">
-      </a>
-      <span class="topo-status" id="topoStatus"></span>
-      <button class="topo-busca" id="btnBusca" aria-label="Buscar no cardápio">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></svg>
-      </button>
-    </header>
-    <div class="busca" id="busca" hidden>
-      <label for="buscaInput">procurar:</label>
-      <input id="buscaInput" type="search" placeholder="frango, picanha, batata…" autocomplete="off" enterkeyhint="search">
-      <button id="buscaFechar">fechar</button>
+  <!-- ABERTURA: pra quantas pessoas? -->
+  <section class="abertura" id="abertura">
+    <div class="abre-midia" id="abreMidia"></div>
+    <div class="abre-txt">
+      <div class="abre-retorno" id="retorno" hidden></div>
+      <p class="abre-sobre" id="abreSobre"></p>
+      <h2 class="abre-tit">Monte<br>sua mesa.</h2>
+      <p class="abre-pergunta">Pra quantas pessoas é hoje?</p>
+      <div class="pessoas" id="pessoas"></div>
+      <button class="abre-pular" id="btnPular">só quero ver o cardápio</button>
+      <div class="info3" id="info3"></div>
     </div>
+  </section>
 
-    <!-- CAPA (produto em destaque, em vídeo) -->
-    <section class="capa" id="capa" hidden></section>
-
-    <!-- O ESSENCIAL (aberto, entrega, frete) — parado, sem letreiro correndo -->
-    <div class="info" id="info"></div>
-
-    <!-- NAVEGAÇÃO (gruda no topo) -->
-    <nav class="trilho" id="trilho" aria-label="Seções do cardápio"><div class="trilho-in" id="trilhoIn"></div></nav>
-
-    <!-- ACOMPANHAR / PEDIR DE NOVO -->
-    <section class="retorno" id="retorno" hidden></section>
-
-    <!-- OS MAIS PEDIDOS -->
-    <section class="ranking" id="ranking" hidden></section>
-
-    <!-- CARDÁPIO -->
-    <main class="menu" id="menu">
-      <div class="carregando"><span>preparando o cardápio</span><i></i></div>
-    </main>
-    <div class="busca-vazia" id="buscaVazia" hidden>
-      <p>Nada com <strong id="buscaTermo"></strong> por aqui.</p>
-      <span class="mao">tenta "frango" ou "batata"</span>
+  <!-- CARDÁPIO GUIADO: prato → acompanhar → beber -->
+  <section class="palco" id="palco" hidden>
+    <nav class="passos" id="passos" aria-label="Etapas do pedido"></nav>
+    <div class="paineis" id="paineis">
+      <div class="painel" id="painel0" data-painel="0"></div>
+      <div class="painel" id="painel1" data-painel="1"></div>
+      <div class="painel" id="painel2" data-painel="2"></div>
     </div>
+    <div class="busca-res" id="buscaRes" hidden></div>
+  </section>
 
-    <footer class="rodape">
-      <img class="rodape-nome" src="assets/wordmark.png" alt="Choppatinhas" width="206" height="50">
-      <p id="rodapeEnd"></p>
-      <p id="rodapeHora"></p>
-      <button class="btn-admin" id="btnAdmin" aria-label="Acesso da casa">área da casa</button>
-    </footer>
+  <!-- BUSCA -->
+  <div class="busca" id="busca" hidden>
+    <input id="buscaInput" type="search" placeholder="Buscar: frango, picanha, batata…" autocomplete="off" enterkeyhint="search">
+    <button id="buscaFechar">fechar</button>
   </div>
 
-  <!-- ABA DA COMANDA (celular) -->
-  <button class="aba" id="aba" hidden>
-    <span class="aba-impressao" id="abaImpressao"></span>
-    <span class="aba-in">
-      <span class="aba-esq"><b>COMANDA</b><small id="abaQtd"></small></span>
-      <span class="aba-meta" id="abaMeta"></span>
-      <span class="aba-total" id="abaTotal"></span>
-    </span>
-  </button>
+  <!-- SUGESTÃO NA MESA (depois de servir um prato) -->
+  <div class="sug-mesa" id="sugMesa" hidden></div>
 
-  <!-- COMANDA (carrinho → fechar pedido → acompanhar) -->
-  <aside class="comanda" id="comanda" aria-label="Sua comanda"></aside>
-  <div class="veu" id="veu"></div>
-
-  <!-- ADMIN -->
-  <div class="adm-senha" id="admSenha" hidden>
-    <form class="adm-senha-box" id="admSenhaForm">
-      <img src="assets/mascote.png" alt="" width="56" height="56">
-      <h3>Área da casa</h3>
-      <p>Digite a senha do painel</p>
-      <input type="password" id="admSenhaInput" inputmode="numeric" maxlength="12" placeholder="••••" autocomplete="off">
-      <small class="adm-erro" id="admErro" hidden>Senha incorreta</small>
-      <div class="adm-senha-acoes">
-        <button type="button" class="btn-ghost" id="admCancelar">Cancelar</button>
-        <button type="submit" class="btn-cta">Entrar</button>
-      </div>
-    </form>
+  <!-- A MESA (carrinho) -->
+  <div class="mesa" id="mesa" hidden>
+    <span class="mesa-frete"><i id="mesaFreteBarra"></i></span>
+    <div class="mesa-in">
+      <div class="mesa-pratos" id="mesaPratos" data-ver-mesa role="button" tabindex="0" aria-label="Ver sua mesa"></div>
+      <button class="mesa-cta" data-ver-mesa><small id="mesaTotal"></small><b>Ver mesa</b></button>
+    </div>
+    <p class="mesa-dica" id="mesaDica"></p>
   </div>
-  <section class="adm" id="adm" hidden></section>
 
-  <div class="aviso-topo" id="toast" role="status" aria-live="polite"></div>
+  <!-- O PRATO DE PERTO -->
+  <section class="zoom" id="zoom" role="dialog" aria-modal="true" aria-label="Prato" hidden></section>
+
+  <!-- FECHAR A MESA: revisão → dados → acompanhar -->
+  <section class="fechar" id="fechar" role="dialog" aria-modal="true" aria-label="Sua mesa" hidden></section>
+
+</div>
+
+<!-- ADMIN -->
+<div class="adm-senha" id="admSenha" hidden>
+  <form class="adm-senha-box" id="admSenhaForm">
+    <img src="assets/mascote.png" alt="" width="56" height="56">
+    <h3>Área da casa</h3>
+    <p>Digite a senha do painel</p>
+    <input type="password" id="admSenhaInput" inputmode="numeric" maxlength="12" placeholder="••••" autocomplete="off">
+    <small class="adm-erro" id="admErro" hidden>Senha incorreta</small>
+    <div class="adm-senha-acoes">
+      <button type="button" class="btn-ghost" id="admCancelar">Cancelar</button>
+      <button type="submit" class="btn-cta">Entrar</button>
+    </div>
+  </form>
+</div>
+<section class="adm" id="adm" hidden></section>
+
+<div class="aviso" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

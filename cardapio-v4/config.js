@@ -31,7 +31,7 @@ window.CHOPP = {
   SECOES: [
     { id: 'frango',  nome: 'Frango',           sub: 'O prato mais pedido da casa, feito na hora',  icon: 'drum',    match: p => p.categoria === 'Porções' && /frango/i.test(p.base) },
     { id: 'combos',  nome: 'Combos da Casa',   sub: 'Pratos completos, feitos para compartilhar',  icon: 'flame',   match: p => p.categoria === 'Porções' && /^combo/i.test(p.base) },
-    { id: 'porcoes', nome: 'Porções',          sub: 'Todas acompanham o nosso molho branco',       icon: 'drum',    match: p => p.categoria === 'Porções' && !/^(arroz|salada|porção de batata frita|porção de polenta frita)$/i.test(p.base) },
+    { id: 'porcoes', nome: 'Porções',          sub: 'Todas acompanham o nosso molho branco',       icon: 'drum',    match: p => p.categoria === 'Porções' && !/^(arroz|salada|porção de batata frita|porção de polenta frita|molho especial da casa)$/i.test(p.base) },
     { id: 'pizzas',  nome: 'Pizzas',           sub: 'Até 2 sabores na mesma pizza',                icon: 'pizza',   match: p => p.categoria === 'Pizzas' },
     { id: 'lanches', nome: 'Lanches',          sub: 'Preparados na chapa, na hora do pedido',   icon: 'burger',  match: p => p.categoria === 'Lanches' },
     { id: 'acomp',   nome: 'Acompanhamentos',  sub: 'Para completar o seu pedido',                        icon: 'fries',   match: p => p.categoria === 'Porções' },
@@ -77,6 +77,7 @@ window.CHOPP = {
     'porção de polenta frita':                 '500 g de polenta frita, crocante por fora e macia por dentro. Uma das favoritas dos nossos clientes.',
     'arroz':                                   'Arroz branco soltinho, 500 g. O complemento certo para os pratos e porções.',
     'salada':                                  'Alface, tomate e cebola fresquinhos. Leveza para equilibrar a refeição.',
+    'molho especial da casa':                  'O molho especial da casa. O toque que deixa o frango, as carnes e as porções ainda melhores.',
     // ── Caldos ──
     'caldo de mandioca com carne seca':        'Caldo cremoso de mandioca com carne seca desfiada. Encorpado, quentinho e reconfortante.',
     'caldo de cabotiá com carne seca':         'Caldo aveludado de cabotiá com carne seca desfiada. Delicado e cheio de sabor.',
@@ -132,6 +133,11 @@ window.CHOPP = {
     'combo frango frito especial c/ arroz e salada': [{ titulo: 'Qual corte?', rotulo: 'Corte', itens: ['Coxa e sobrecoxa', 'Só peito'] }],
     'marmitas media e grande': [{ titulo: 'Escolha a carne', rotulo: 'Carne', itens: ['Filé de peito grelhado', 'Filé de tilápia frito', 'Frango chinquim frito', 'Bisteca bovina', 'Bisteca suína'] }],
   },
+
+  // Cross-sell de R$ 10: o molho especial é a 1ª sugestão sempre que entra
+  // frango, combo ou porção (no "vai bem junto" e nas sugestões da comanda).
+  // Nome tem que ser igual ao do produto no banco.
+  MOLHO_CASA: 'Molho Especial Da Casa',
 
   // "Turbine seu pedido" (dentro do produto) e "Vai bem com isso" (carrinho)
   // NÃO usam mais uma lista fixa por seção — a lógica em app.js
