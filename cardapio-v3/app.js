@@ -187,6 +187,7 @@ function agrupar() {
 
 // Anotação de caneta do garçom (só com fato: ranking real, venda real, promo, destaque)
 function notaDe(g) {
+  if (g.base.toLowerCase() === C.MOLHO_CASA.toLowerCase()) return 'especial da casa';
   if (g.promo) return 'oferta de hoje!';
   if (g.rankAnota === 0) return 'o nº 1 da casa';
   if (g.hoje >= 3) return `já saíram ${g.hoje} hoje`;
@@ -208,6 +209,9 @@ const oferecerAlcool = () => String(S.info.oferecer_alcool ?? 'true') === 'true'
 const ehAlcool = r => /cerveja|chopp/i.test(r.nome);
 function horarioTxt() { return valido(S.info.horario) ? S.info.horario.replace(/\(.*?\)/g, '').trim() : C.DEFAULTS.horario; }
 
+// Molho especial da casa (R$ 10): 1ª sugestão pra frango, combos e porções
+const ehMolho = r => !!r && r.nome === C.MOLHO_CASA;
+
 // Complementos certos pra cada prato (mesma lógica da v2)
 function candidatosPara(g, max = 4) {
   const alcoolOk = oferecerAlcool() && g.secao !== 'marmitex';
@@ -221,6 +225,7 @@ function candidatosPara(g, max = 4) {
   const temBatataNoNome = /batata/i.test(g.base);
 
   if (g.secao === 'frango' || g.secao === 'combos' || g.secao === 'porcoes') {
+    add([C.MOLHO_CASA]);
     if (!temBatataNoNome) add(['Porção De Batata Frita (M)']);
     if (!temArrozSalada && !ehArrozOuSalada) add(['Arroz', 'Salada']);
     if (alcoolOk) add(['Cerveja Brahma', 'Cerveja Skol']);
@@ -243,6 +248,8 @@ function candidatosPara(g, max = 4) {
 
   const af = S.afinidade.get(semAcento(g.base));
   if (af?.size) lista.sort((a, b) => (af.get(semAcento(parseNome(b.nome).base)) || 0) - (af.get(semAcento(parseNome(a.nome).base)) || 0));
+  const iMolho = lista.findIndex(ehMolho);
+  if (iMolho > 0) lista.unshift(...lista.splice(iMolho, 1));
   return lista.slice(0, max);
 }
 const SECOES_COMBINA = new Set(['frango', 'combos', 'porcoes', 'lanches', 'caldos', 'marmitex']);
@@ -745,7 +752,7 @@ function posHTML() {
         <div class="pos-lista">${cands.map(r => {
           const { base, tam } = parseNome(r.nome);
           const libera = t.fg > 0 && !t.gratis && efetivo(r) >= t.falta;
-          return `<button class="pos-it${aceitos.has(r.id) ? ' on' : ''}" data-junto="${r.id}"><i class="caixa"></i><span>${esc(nomeBonito(base))}${tam ? ` <small>(${esc(tam)})</small>` : ''}${libera ? '<em class="mao">libera o frete!</em>' : ''}</span><span class="pontos"></span><b>+${fmtNum(efetivo(r))}</b></button>`;
+          return `<button class="pos-it${aceitos.has(r.id) ? ' on' : ''}" data-junto="${r.id}"><i class="caixa"></i><span>${esc(nomeBonito(base))}${tam ? ` <small>(${esc(tam)})</small>` : ''}${ehMolho(r) ? '<em class="mao">especial da casa!</em>' : libera ? '<em class="mao">libera o frete!</em>' : ''}</span><span class="pontos"></span><b>+${fmtNum(efetivo(r))}</b></button>`;
         }).join('')}</div>` : ''}
       <button class="pos-fim" data-pos-fim>${aceitos.size ? 'pronto, continuar →' : cands.length ? 'não, obrigado' : 'ok'}</button>
     </div>`;
@@ -789,6 +796,8 @@ function mostrarJunto(g) {
     ? candidatosPara(g, 6).filter(r => !S.carrinho.some(i => i.pid === r.id)).slice(0, 3) : [];
   S.pos = { key: g.key, cands, aceitos: new Set() };
   if (cands.length) rastrear('combina_mostrado', { produto: nomeBonito(parseNome(cands[0].nome).base), valor: efetivo(cands[0]), prato: g.nome });
+  const molho = cands.find(ehMolho);
+  if (molho) rastrear('molho_mostrado', { produto: nomeBonito(molho.nome), valor: efetivo(molho), prato: g.nome });
   return cands.length;
 }
 
@@ -1040,7 +1049,7 @@ function cmdLista() {
         <p class="cmd-rot">sugestões da casa</p>
         ${sug.map(({ r, fecha }) => { const { base, tam } = parseNome(r.nome); return `
           <button class="cmd-sug-it" data-sug="${r.id}" ${fecha ? 'data-fecha' : ''}>
-            <i>[+]</i><span>${esc(nomeBonito(base))}${tam ? ` (${esc(tam)})` : ''}${fecha ? '<em class="mao">libera o frete</em>' : ''}</span><span class="pontos"></span><b>${fmtNum(efetivo(r))}</b>
+            <i>[+]</i><span>${esc(nomeBonito(base))}${tam ? ` (${esc(tam)})` : ''}${ehMolho(r) ? '<em class="mao">especial da casa</em>' : fecha ? '<em class="mao">libera o frete</em>' : ''}</span><span class="pontos"></span><b>${fmtNum(efetivo(r))}</b>
           </button>`; }).join('')}
       </div>` : ''}`;
   const pe = `
@@ -1209,7 +1218,7 @@ async function finalizar() {
       porFonte[i.fonte || 'cardapio'] = r2((porFonte[i.fonte || 'cardapio'] || 0) + v);
       if (i.difTamanho && i.motivoTamanho !== 'escolha') ganhoTamanho = r2(ganhoTamanho + i.difTamanho * i.qtd);
     });
-    const receitaSug = r2(['combina', 'libera_frete', 'vai_bem', 'oferta_rapida', 'latas6'].reduce((s2, o) => s2 + (porOrigem[o] || 0), 0));
+    const receitaSug = r2(['combina', 'molho', 'libera_frete', 'vai_bem', 'oferta_rapida', 'latas6'].reduce((s2, o) => s2 + (porOrigem[o] || 0), 0));
     rastrear('pedido_feito', {
       pedido_id: pedido.id, valor: t.total, subtotal: t.sub, taxa: t.taxa, tipo: ck.tipo, pagamento: ck.pag,
       frete_gratis: ck.tipo === 'delivery' && t.taxa === 0, itens: S.carrinho.reduce((s2, i) => s2 + i.qtd, 0),
@@ -1448,6 +1457,7 @@ async function carregarResultados() {
           ${linha('“Libera o frete”', null, aceitosOrigem('libera_frete'), somaOrigem('libera_frete'), 'na comanda')}
           ${linha('Sugestões da casa', null, aceitosOrigem('vai_bem'), somaOrigem('vai_bem'), 'na comanda')}
           ${linha('Tamanho maior', null, conta('upgrade_tamanho'), ganhoTam, 'botão + G pré-marcado')}
+          ${linha('Molho especial da casa', conta('molho_mostrado'), aceitosOrigem('molho'), somaOrigem('molho'), 'sugerido com frango, combos e porções')}
           ${linha('+6 latas', null, aceitosOrigem('latas6'), somaOrigem('latas6'))}
           ${linha('Vídeo em destaque', null, conta('destaque_clique'), somaFonte('destaque'), 'cliques → itens vindos dele')}
           ${linha('Os mais pedidos', null, E.filter(e => e.evento === 'produto_aberto' && e.dados?.fonte === 'mais_pedidos').length, somaFonte('mais_pedidos'))}
@@ -1732,12 +1742,12 @@ function eventos() {
       const r = S.porId.get(d.junto); if (!r || !S.pos) return;
       const nome = nomeBonito(parseNome(r.nome).base);
       if (S.pos.aceitos.has(r.id)) {
-        const it = S.carrinho.find(i => i.pid === r.id && i.origem === 'combina' && !i.obs);
+        const it = S.carrinho.find(i => i.pid === r.id && (i.origem === 'combina' || i.origem === 'molho') && !i.obs);
         if (it) mudarQtd(it.k, -1);
         S.pos.aceitos.delete(r.id);
       } else {
         const antes = totais();
-        addItem(itemRapido(r, 1, 'combina'));
+        addItem(itemRapido(r, 1, ehMolho(r) ? 'molho' : 'combina'));
         S.pos.aceitos.add(r.id);
         rastrear('combina_aceito', { produto: nome, valor: efetivo(r) });
         avisarFrete(antes);
@@ -1783,7 +1793,7 @@ function eventos() {
     if (d.sug) {
       const r = S.porId.get(d.sug); if (!r) return;
       const antes = totais();
-      addItem(itemRapido(r, 1, 'fecha' in d ? 'libera_frete' : 'vai_bem'), false);
+      addItem(itemRapido(r, 1, ehMolho(r) ? 'molho' : 'fecha' in d ? 'libera_frete' : 'vai_bem'), false);
       renderAba(); atualizarMenu(); renderComanda(); avisarFrete(antes);
       return;
     }
