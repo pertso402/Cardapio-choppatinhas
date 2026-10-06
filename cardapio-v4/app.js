@@ -24,7 +24,7 @@ const S = {
   pedidosHoje: 0,
   afinidade: new Map(),
   carrinho: ls('chopp_carrinho', []),
-  pessoas: ls('chopp_pessoas', 0), // 0 = não informou; 1, 2, 4 (3–4), 6 (5+)
+  pessoas: 0, // a pergunta de nº de pessoas saiu da abertura; 0 = sugestões no padrão (mesa de 2)
   etapa: 0,        // 0 abertura · 1 o prato · 2 pra acompanhar · 3 pra beber
   busca: '',
   zoom: null,      // prato aberto de perto
@@ -365,10 +365,6 @@ function renderAbertura() {
     ligarVideo(box);
   }
   $('#abreSobre').textContent = lojaAberta() ? `Cozinha aberta${ateQuando() ? ' até ' + ateQuando() : ''} · Umuarama` : 'Fechado agora · você já pode montar a mesa';
-  $('#pessoas').innerHTML = PESSOAS.map(p => `
-    <button class="pessoa${S.pessoas === p.n ? ' on' : ''}" data-pessoas="${p.n}">
-      <span class="pessoa-prato">${p.rot}</span><small>${p.sub}</small>
-    </button>`).join('');
   const fg = num('frete_gratis_acima');
   const cel = (rot, val) => `<div><small>${rot}</small><b>${esc(val)}</b></div>`;
   $('#info3').innerHTML = [
@@ -459,7 +455,7 @@ function renderPassos() {
       const feito = S.carrinho.some(it => painelDaSecao(it.secao) === i);
       return `<button class="passo${S.etapa === i + 1 ? ' on' : ''}${feito ? ' feito' : ''}" data-etapa="${i + 1}"><i>${feito ? ICON.ok : i + 1}</i>${p.curto}</button>`;
     }).join('')}
-    <button class="passo-mesa" data-etapa="0" aria-label="Mudar número de pessoas (${esc(mesaDe())})">${ICON.gente}${S.pessoas ? (S.pessoas >= 6 ? '5+' : S.pessoas === 4 ? '3–4' : S.pessoas) : '?'}</button>`;
+    ${S.pessoas ? `<button class="passo-mesa" data-etapa="0" aria-label="Mudar número de pessoas (${esc(mesaDe())})">${ICON.gente}${S.pessoas ? (S.pessoas >= 6 ? '5+' : S.pessoas === 4 ? '3–4' : S.pessoas) : '?'}</button>` : ''}`;
 }
 
 function qtdNoCarrinho(g) { const ids = new Set(g.variantes.map(v => v.id)); return S.carrinho.filter(i => ids.has(i.pid)).reduce((s, i) => s + i.qtd, 0); }
@@ -1643,7 +1639,7 @@ const fonteDe = el => el.closest('[data-fonte]')?.dataset.fonte || (S.busca ? 'b
 
 function eventos() {
   $('#btnInicio').addEventListener('click', () => { if (pilha.length) return; irEtapa(0); });
-  $('#btnPular').addEventListener('click', () => { S.pessoas = 0; lsSet('chopp_pessoas', 0); renderAbertura(); renderPaineis(); irEtapa(1); });
+  $('#btnComecar').addEventListener('click', () => irEtapa(1));
   const abrirBusca = () => { $('#busca').hidden = false; $('#buscaInput').focus(); };
   const fecharBusca = () => { $('#busca').hidden = true; $('#buscaInput').value = ''; S.busca = ''; renderBusca(); };
   $('#btnBusca').addEventListener('click', () => ($('#busca').hidden ? abrirBusca() : fecharBusca()));

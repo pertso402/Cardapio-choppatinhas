@@ -510,3 +510,8 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* abertura sem a pergunta de pessoas: um botão só pra entrar */
+.abre-cta { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 60px; margin-top: 26px; padding: 0 22px; background: var(--brasa); color: #fff; font-size: 17px; font-weight: 700; box-shadow: 0 12px 30px rgba(255, 90, 31, .35); transition: transform .12s; }
+.abre-cta b { font-size: 24px; }
+.abre-cta:active { transform: scale(.98); }
