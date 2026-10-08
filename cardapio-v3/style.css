@@ -265,10 +265,10 @@ body.com-trilho .trilho { transform: none; }
 .p-ing { font-size: 14px; text-transform: lowercase; padding: 2px 0; position: relative; }
 .p-ing.riscado { color: var(--cinza); }
 .p-ing.riscado::after { content: ''; position: absolute; left: -3px; right: -3px; top: 52%; height: 2px; background: var(--caneta); transform: rotate(-4deg); }
-.p-campo, .ck-campo { display: flex; align-items: baseline; gap: 10px; padding: 6px 0 4px; border-bottom: 1.5px dashed var(--tinta); }
-.p-campo span, .ck-campo span { flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza); }
-.p-campo input, .ck-campo input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; outline: none; padding: 4px 0; }
-.p-campo input::placeholder, .ck-campo input::placeholder { color: rgba(21, 16, 13, .35); }
+.p-campo { display: flex; align-items: baseline; gap: 10px; padding: 6px 0 4px; border-bottom: 1.5px dashed var(--tinta); }
+.p-campo span { flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza); }
+.p-campo input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; outline: none; padding: 4px 0; }
+.p-campo input::placeholder { color: rgba(21, 16, 13, .35); }
 .p-pe { display: flex; gap: 10px; margin-top: 18px; }
 .p-anotar { flex: 1; min-width: 0; white-space: nowrap; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; background: var(--tinta); color: var(--papel); font-weight: 700; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; transition: transform .12s; }
 .p-anotar b { font-size: 14px; letter-spacing: 0; }
@@ -340,6 +340,9 @@ body.com-trilho .trilho { transform: none; }
 .cmd-corpo { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px 18px 18px; }
 .cmd-pe { flex-shrink: 0; padding: 12px 18px calc(14px + var(--safe-b)); border-top: 1.5px dashed var(--tinta); }
 .cmd-rot { font-size: 10.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--cinza); }
+/* No checkout o rótulo da etapa vira título: é ele que guia quem está perdido */
+#comanda .ck-sec > .cmd-rot { font-size: 14px; font-weight: 700; letter-spacing: .1em; color: var(--tinta); margin-bottom: 10px; }
+.ck-sec { margin-bottom: 26px; }
 .cmd-cols { display: grid; grid-template-columns: 34px 1fr auto; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza); padding-bottom: 6px; border-bottom: 1px solid var(--tinta); }
 .cmd-it { display: grid; grid-template-columns: 34px 1fr auto; gap: 2px 0; padding: 10px 0 8px; border-bottom: 1px dotted var(--regua); font-size: 13px; }
 .cmd-it.novo { animation: linha-nova .7s steps(14) both; }
@@ -379,14 +382,31 @@ body.com-trilho .trilho { transform: none; }
 /* fechar pedido */
 .ck-sec { margin-bottom: 22px; }
 .ck-sec > .cmd-rot { padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--tinta); }
-.ck-campo { margin-bottom: 6px; }
-.ck-campo.erro { border-bottom-color: var(--verm); }
-.ck-campo.erro span { color: var(--verm); }
-.ck-ops { display: grid; gap: 8px; margin-bottom: 10px; }
-.ck-pags { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.ck-op { padding: 11px 12px; border: 1.5px solid var(--tinta); text-align: left; transition: background .15s, color .15s; }
-.ck-op b { display: block; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; }
-.ck-op small { display: block; font-size: 11.5px; color: var(--cinza); }
+/* Campos do checkout: caixa de verdade, grande e com rótulo em cima.
+   Antes era texto transparente sobre um tracejado, com rótulo cinza de 11px ao
+   lado — não parecia campo e a área de toque dava ~34px. Gente de meia-idade
+   travava aqui. Agora: 58px de altura, 17px de texto e contraste alto. */
+.ck-campo { display: block; margin-bottom: 16px; }
+.ck-campo > span { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta); }
+.ck-campo input {
+  width: 100%; height: 58px; padding: 0 15px;
+  border: 2px solid var(--tinta); background: #fff;
+  font-size: 17px; color: var(--tinta); outline: none;
+  -webkit-appearance: none; border-radius: 0;
+}
+.ck-campo input::placeholder { color: rgba(21, 16, 13, .38); font-size: 16px; }
+.ck-campo input:focus { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(47, 125, 80, .18); }
+.ck-campo.erro input { border-color: var(--verm); background: #FFF4F2; }
+.ck-campo.erro > span { color: var(--verm); }
+.ck-err { display: none; margin-top: 6px; font-size: 13.5px; font-weight: 600; color: var(--verm); }
+.ck-campo.erro .ck-err { display: block; }
+.ck-ops { display: grid; gap: 10px; margin-bottom: 14px; }
+.ck-pags { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* alvo de toque confortável: 44px é o mínimo recomendado, aqui vai folgado */
+.ck-op { min-height: 62px; padding: 14px; border: 2px solid var(--tinta); text-align: left; transition: background .15s, color .15s; }
+.ck-pags .ck-op { min-height: 58px; }
+.ck-op b { display: block; font-size: 14.5px; letter-spacing: .06em; text-transform: uppercase; }
+.ck-op small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--cinza); }
 .ck-op.on { background: var(--tinta); color: var(--papel); }
 .ck-op.on small { color: rgba(250, 248, 243, .7); }
 .ck-op.on > .caixa::after { color: var(--ouro); }

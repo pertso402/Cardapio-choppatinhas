@@ -1083,6 +1083,12 @@ function abrirCheckout() {
   renderComanda();
   $('#comanda .cmd-corpo').scrollTop = 0;
   rastrear('checkout_aberto', { valor: totais().sub });
+  // Põe o cursor no primeiro campo vazio: quem não percebeu que precisa tocar
+  // ali já começa com o teclado aberto no lugar certo.
+  setTimeout(() => {
+    const alvo = !S.ck?.nome ? $('#ckNome') : !S.ck?.tel ? $('#ckTel') : null;
+    if (alvo) { alvo.focus({ preventScroll: true }); alvo.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }, 350);
   if (bump) rastrear('oferta_mostrada', { produto: nomeBonito(parseNome(bump.nome).base), valor: efetivo(bump) });
 }
 function lerCampos() {
@@ -1092,7 +1098,10 @@ function lerCampos() {
   ck.obs = $('#ckObs')?.value.trim() || '';
   if ($('#ckTroco')) ck.troco = $('#ckTroco').value.trim();
 }
-const campo = (id, rot, val, extra = '') => `<label class="ck-campo"><span>${rot}</span><input id="${id}" value="${esc(val)}" ${extra}></label>`;
+// O erro vai embaixo do próprio campo. Só o toast não resolve: quem tem vista
+// cansada não liga o aviso no rodapé ao campo lá em cima.
+const campo = (id, rot, val, extra = '', erro = '') =>
+  `<label class="ck-campo"><span>${rot}</span><input id="${id}" value="${esc(val)}" ${extra}>${erro ? `<em class="ck-err">${esc(erro)}</em>` : ''}</label>`;
 
 function cmdCheckout() {
   const ck = S.ck, t = totais(ck.tipo);
@@ -1103,8 +1112,8 @@ function cmdCheckout() {
     <button class="cmd-voltar" data-cmd-voltar>← voltar pra comanda</button>
     <div class="ck-sec">
       <p class="cmd-rot">1 · quem pede</p>
-      ${campo('ckNome', 'nome', ck.nome, 'autocomplete="name" placeholder="como te chamamos?"')}
-      ${campo('ckTel', 'whatsapp', mascaraTel(ck.tel), 'type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(44) 99999-9999"')}
+      ${campo('ckNome', 'seu nome', ck.nome, 'autocomplete="name" autocapitalize="words" placeholder="ex.: Maria Silva"', 'escreva seu nome')}
+      ${campo('ckTel', 'seu whatsapp', mascaraTel(ck.tel), 'type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(44) 99999-9999"', 'faltou o telefone com DDD')}
     </div>
     <div class="ck-sec">
       <p class="cmd-rot">2 · como receber</p>
@@ -1113,9 +1122,9 @@ function cmdCheckout() {
         <button class="ck-op${ck.tipo === 'retirada' ? ' on' : ''}" data-tipo="retirada"><i class="caixa"></i><span><b>retirar no balcão</b><small>sem taxa · ${C.DEFAULTS.tempo_retirada}</small></span></button>
       </div>
       ${ck.tipo === 'delivery' ? `
-        ${campo('ckRua', 'rua e nº', ck.rua, 'autocomplete="street-address" placeholder="av. paraná, 1234"')}
-        ${campo('ckBairro', 'bairro', ck.bairro, 'placeholder="bairro"')}
-        ${campo('ckComp', 'compl.', ck.comp, 'placeholder="ap, casa, referência"')}`
+        ${campo('ckRua', 'rua e número', ck.rua, 'autocomplete="street-address" autocapitalize="words" placeholder="ex.: Av. Paraná, 1234"', 'escreva a rua e o número')}
+        ${campo('ckBairro', 'bairro', ck.bairro, 'autocapitalize="words" placeholder="ex.: Zona III"', 'escreva o bairro')}
+        ${campo('ckComp', 'complemento (opcional)', ck.comp, 'autocapitalize="sentences" placeholder="ap, casa, ponto de referência"')}`
         : `<p class="ck-nota">retirada em <b>${esc(valido(S.info.endereco) ? S.info.endereco : 'Choppatinhas, Umuarama-PR')}</b></p>`}
     </div>
     ${bump && (!S.carrinho.some(i => i.pid === bump.id) || ck.bumpOn) ? `
@@ -1133,7 +1142,7 @@ function cmdCheckout() {
     <div class="ck-sec">
       <p class="cmd-rot">4 · confere</p>
       <div class="ck-resumo">${S.carrinho.map(i => `<p><span>${i.qtd}x ${esc(i.titulo)}${i.sub ? ` (${esc(i.sub)})` : ''}</span><span>${fmtNum(i.preco * i.qtd)}</span></p>`).join('')}</div>
-      ${campo('ckObs', 'obs.', ck.obs, 'maxlength="200" placeholder="alguma observação?"')}
+      ${campo('ckObs', 'observação (opcional)', ck.obs, 'maxlength="200" autocapitalize="sentences" placeholder="ex.: sem cebola, troco para 100"')}
     </div>`;
   const pe = `
     <div class="cmd-tot">
@@ -1159,6 +1168,21 @@ function validarCheckout() {
 }
 function telefoneBanco(d) { d = soDigitos(d); return d.length <= 11 ? '55' + d : d; }
 
+// O WhatsApp entrega o JID no formato antigo (sem o 9) e o cardápio grava com o
+// 9. É a mesma pessoa: sem considerar as duas formas, quem já pediu pelo
+// WhatsApp vira um segundo cadastro — e aí recompra, LTV e CAC saem errados.
+function variantesTelefone(num) {
+  const d = soDigitos(num);
+  const vs = new Set([d]);
+  const m = d.match(/^55(\d{2})(\d{8,9})$/);
+  if (m) {
+    const [, ddd, resto] = m;
+    if (resto.length === 9 && resto[0] === '9') vs.add(`55${ddd}${resto.slice(1)}`);
+    if (resto.length === 8) vs.add(`55${ddd}9${resto}`);
+  }
+  return [...vs];
+}
+
 async function finalizar() {
   const ck = S.ck;
   if (ck.enviando || !validarCheckout()) return;
@@ -1172,7 +1196,11 @@ async function finalizar() {
     const tel = telefoneBanco(ck.tel);
     const endereco = ck.tipo === 'delivery' ? `${ck.rua}${ck.comp ? ', ' + ck.comp : ''} - ${ck.bairro}` : null;
 
-    let { data: cli } = await sb.from('clientes').select('id, total_pedidos, total_gasto, primeiro_pedido').eq('telefone', tel).maybeSingle();
+    const { data: achados } = await sb.from('clientes')
+      .select('id, total_pedidos, total_gasto, primeiro_pedido')
+      .in('telefone', variantesTelefone(tel))
+      .order('total_pedidos', { ascending: false }).limit(1);
+    let cli = achados?.[0] || null;
     if (cli) {
       const patch = { nome: ck.nome }; if (endereco) patch.endereco = endereco;
       await sb.from('clientes').update(patch).eq('id', cli.id);
