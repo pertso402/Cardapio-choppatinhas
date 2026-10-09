@@ -18,7 +18,7 @@ window.CHOPP = {
     pedido_minimo: 20,
     tempo_entrega: '40–60 min',
     tempo_retirada: '~20 min',
-    horario: 'Fecha às 22:30',
+    horario: 'Segunda a sexta: 17h30 às 23h; sábado: 11h às 23h',
     avaliacao: '4,7',
   },
 
