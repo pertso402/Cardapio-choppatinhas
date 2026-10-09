@@ -65,6 +65,8 @@
 
     <!-- CAPA (produto em destaque, em vídeo) -->
     <section class="capa" id="capa" hidden></section>
+    <!-- se já visitou: desenha a capa guardada AGORA, antes dos scripts carregarem, pro vídeo começar na hora -->
+    <script>try{var c=JSON.parse(localStorage.getItem('chopp_capa_v3')||'null');if(c&&c.html&&!matchMedia('(prefers-reduced-motion: reduce)').matches){var s=document.getElementById('capa');s.innerHTML=c.html;s.hidden=false;s.dataset.g=c.g;s.dataset.m=c.m}}catch(e){}</script>
 
     <!-- LETREIRO -->
     <div class="letreiro" id="letreiro" aria-hidden="true"><div class="letreiro-trilho" id="letreiroTrilho"></div></div>

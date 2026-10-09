@@ -368,20 +368,42 @@ let obsCapa;
 // Navegador embutido de app (WhatsApp, Instagram…) costuma recusar autoplay de
 // vídeo mesmo mudo. Aí troca pra animação (.webp com o mesmo nome do vídeo) —
 // imagem animada nunca é bloqueada. Só sem animação é que aparece o botão de tocar.
-function tentarTocarCapa(v) {
+function tentarTocarCapa(v, tentativa = 0) {
   const box = v.closest('.capa-midia');
-  v.play().then(() => box?.classList.remove('precisa-toque')).catch(() => usarAnimacaoDeReserva(v, box));
+  v.play().then(() => { clearTimeout(box?._toqueT); box?.classList.remove('precisa-toque'); })
+    .catch(err => {
+      // "interrompido" (AbortError) é só o navegador ainda carregando: tenta de novo, sem mostrar nada
+      if (err?.name === 'AbortError' && tentativa < 4) return setTimeout(() => tentarTocarCapa(v, tentativa + 1), 300);
+      usarAnimacaoDeReserva(v, box);
+    });
+}
+// O botão de play só aparece se, depois de tudo, nada estiver se mexendo — e nunca de relance
+function pedirToque(box, v) {
+  clearTimeout(box._toqueT);
+  box._toqueT = setTimeout(() => { if (v.paused && $('#capaAnim', box)?.hidden !== false) box.classList.add('precisa-toque'); }, 1800);
 }
 function usarAnimacaoDeReserva(v, box) {
   if (!box) return;
   const anim = box.querySelector('#capaAnim');
-  if (!anim) { box.classList.add('precisa-toque'); return; }
+  if (!anim) { pedirToque(box, v); return; }
   if (!anim.hidden) { box.classList.remove('precisa-toque'); return; }
   if (box.dataset.animTentada) return;
   box.dataset.animTentada = '1';
-  anim.addEventListener('load', () => { v.style.visibility = 'hidden'; anim.hidden = false; box.classList.remove('precisa-toque'); }, { once: true });
-  anim.addEventListener('error', () => box.classList.add('precisa-toque'), { once: true });
+  anim.addEventListener('load', () => { clearTimeout(box._toqueT); v.style.visibility = 'hidden'; anim.hidden = false; box.classList.remove('precisa-toque'); }, { once: true });
+  anim.addEventListener('error', () => pedirToque(box, v), { once: true });
   anim.src = v.currentSrc.replace(/\.(mp4|webm|mov)(\?.*)?$/i, '.webp$2');
+  pedirToque(box, v); // se nem a animação chegar em alguns segundos, aí sim oferece o play
+}
+// liga o vídeo da capa (usado ao desenhar a capa e ao restaurar a capa guardada)
+function ligarCapa() {
+  const v = $('#capaVideo'); if (!v || v.dataset.ligado) return;
+  v.dataset.ligado = '1';
+  tentarTocarCapa(v);
+  v.addEventListener('canplay', () => { if (v.paused) tentarTocarCapa(v); }, { once: true });
+  v.addEventListener('playing', () => { const box = v.closest('.capa-midia'); clearTimeout(box?._toqueT); box?.classList.remove('precisa-toque'); });
+  obsCapa?.disconnect();
+  obsCapa = new IntersectionObserver(([e]) => { if (e.isIntersecting) tentarTocarCapa(v); else v.pause(); }, { threshold: .2 });
+  obsCapa.observe(v);
 }
 
 function renderCapa() {
@@ -393,11 +415,13 @@ function renderCapa() {
   if (capa.dataset.g === g.key && capa.dataset.m === midia) return; // nada mudou: não reinicia o vídeo
   capa.dataset.g = g.key; capa.dataset.m = midia;
   const video = g.video && !reduzMovimento();
+  const quadro1 = g.video ? g.video.replace(/\.(mp4|webm|mov)(\?.*)?$/i, '.jpg$2') : '';
   const linhas = linhasCartaz(nomeCartaz(g));
   capa.innerHTML = `
     <div class="capa-midia" data-abre="${esc(g.key)}">
       ${video
-        ? `<video id="capaVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted autoplay loop playsinline preload="auto"></video>
+        ? `<img class="capa-quadro" src="${esc(quadro1)}" alt="" data-alt="${esc(g.img || '')}" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt}" fetchpriority="high">
+           <video id="capaVideo" src="${esc(g.video)}" muted autoplay loop playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback controlslist="nodownload nofullscreen noremoteplayback"></video>
            <img id="capaAnim" alt="" hidden>`
         : g.video
           ? `<video id="capaVideo" src="${esc(g.video)}" ${g.img ? `poster="${esc(g.img)}"` : ''} muted loop playsinline preload="auto" controls></video>`
@@ -417,14 +441,8 @@ function renderCapa() {
     </div>`;
   encaixar(capa);
   observarRabiscos(capa);
-  const v = $('#capaVideo');
-  if (v && video) {
-    tentarTocarCapa(v);
-    v.addEventListener('canplay', () => { if (v.paused) tentarTocarCapa(v); }, { once: true });
-    obsCapa?.disconnect();
-    obsCapa = new IntersectionObserver(([e]) => { if (e.isIntersecting) tentarTocarCapa(v); else v.pause(); }, { threshold: .2 });
-    obsCapa.observe(v);
-  }
+  if (video) { lsSet('chopp_capa_v3', { g: g.key, m: midia, html: capa.innerHTML }); ligarCapa(); }
+  else { try { localStorage.removeItem('chopp_capa_v3'); } catch { /* ok */ } }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2006,6 +2024,7 @@ function eventos() {
 // ═══════════════════════════════════════════════════════════════════════════
 async function init() {
   eventos();
+  if ($('#capaVideo')) { ligarCapa(); encaixar($('#capa')); observarRabiscos($('#capa')); document.fonts?.ready.then(() => encaixar($('#capa'))); }
   renderAba(); renderComanda();
   try { await carregar(); }
   catch (e) {
