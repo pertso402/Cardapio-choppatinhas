@@ -1078,7 +1078,7 @@ function abrirCheckout() {
   if (!S.carrinho.length) return;
   const cli = ls('chopp_cliente', {});
   const bump = escolherBump();
-  S.ck = { tipo: cli.tipo || 'delivery', rua: cli.rua || '', bairro: cli.bairro || '', comp: cli.comp || '', nome: cli.nome || '', tel: cli.tel || '', pag: cli.pag || '', troco: '', obs: '', enviando: false, bumpPid: bump?.id || null, bumpOn: false };
+  S.ck = { tipo: cli.tipo || 'delivery', rua: cli.rua || '', bairro: cli.bairro || '', comp: cli.comp || '', nome: cli.nome || '', tel: cli.tel || '', pag: cli.pag || '', troco: '', trocoSim: false, obs: '', obsAberta: false, erros: {}, enviando: false, bumpPid: bump?.id || null, bumpOn: false };
   S.cmd = 'checkout';
   renderComanda();
   $('#comanda .cmd-corpo').scrollTop = 0;
@@ -1089,51 +1089,122 @@ function lerCampos() {
   const ck = S.ck; if (!ck || !$('#ckNome')) return;
   ck.nome = $('#ckNome').value.trim(); ck.tel = soDigitos($('#ckTel').value);
   if ($('#ckRua')) { ck.rua = $('#ckRua').value.trim(); ck.bairro = $('#ckBairro').value.trim(); ck.comp = $('#ckComp').value.trim(); }
-  ck.obs = $('#ckObs')?.value.trim() || '';
+  if ($('#ckObs')) ck.obs = $('#ckObs').value.trim();
   if ($('#ckTroco')) ck.troco = $('#ckTroco').value.trim();
 }
-const campo = (id, rot, val, extra = '') => `<label class="ck-campo"><span>${rot}</span><input id="${id}" value="${esc(val)}" ${extra}></label>`;
+
+// ─── o que ainda falta pra enviar (na ordem em que aparece na tela) ─────────
+const CK_FALTA = { ckNome: 'seu nome', ckTel: 'seu WhatsApp', ckRua: 'rua e número', ckBairro: 'o bairro', pag: 'forma de pagamento', ckTroco: 'valor do troco' };
+function msgCk(id) {
+  const ck = S.ck;
+  if (id === 'ckNome') return 'Digite seu nome.';
+  if (id === 'ckTel') return ck.tel ? 'Confira o número: precisa ter o DDD, ex.: (44) 99999-9999.' : 'Digite seu WhatsApp com DDD, ex.: (44) 99999-9999.';
+  if (id === 'ckRua') return 'Digite a rua e o número da casa.';
+  if (id === 'ckBairro') return 'Digite o bairro.';
+  if (id === 'pag') return 'Escolha como você vai pagar.';
+  if (id === 'ckTroco') return `Digite um valor maior que o total (${fmt(totais(ck.tipo).total)}).`;
+  return '';
+}
+function problemasCk() {
+  const ck = S.ck; const p = [];
+  if (ck.nome.trim().length < 2) p.push('ckNome');
+  const tel = soDigitos(ck.tel); if (tel.length < 10 || tel.length > 11) p.push('ckTel');
+  if (ck.tipo === 'delivery') { if (ck.rua.trim().length < 4) p.push('ckRua'); if (ck.bairro.trim().length < 2) p.push('ckBairro'); }
+  if (!ck.pag) p.push('pag');
+  else if (ck.pag === 'dinheiro' && ck.trocoSim) {
+    const v = parseFloat(String(ck.troco).replace(',', '.'));
+    if (!(v >= totais(ck.tipo).total)) p.push('ckTroco');
+  }
+  return p;
+}
+const SECOES_CK = { dados: ['ckNome', 'ckTel'], entrega: ['ckRua', 'ckBairro'], pag: ['pag', 'ckTroco'] };
+const secaoOk = (sec, p = problemasCk()) => !SECOES_CK[sec].some(id => p.includes(id));
+
+const campo = (id, rot, val, { extra = '', dica = '', opcional = false } = {}) => {
+  const erro = S.ck?.erros?.[id];
+  return `<div class="ck-campo${erro ? ' erro' : ''}" data-campo="${id}">
+    <label for="${id}">${rot}${opcional ? ' <small>(opcional)</small>' : ''}</label>
+    <input id="${id}" value="${esc(val)}" enterkeyhint="next" ${extra}>
+    <p class="ck-erro"${erro ? '' : ' hidden'}>${erro ? esc(erro) : ''}</p>
+    ${dica ? `<p class="ck-dica">${dica}</p>` : ''}
+  </div>`;
+};
+function ckBotaoHTML() {
+  const ck = S.ck, t = totais(ck.tipo);
+  if (ck.enviando) return '<button class="cmd-btn verde" id="ckFinalizar" disabled><span>enviando pedido…</span><span></span></button>';
+  const p = problemasCk();
+  if (p.length) return `<button class="cmd-btn falta" id="ckFinalizar"><span>Falta: ${CK_FALTA[p[0]]}</span><span>↑</span></button>`;
+  return `<button class="cmd-btn verde" id="ckFinalizar"><span>Enviar pedido</span><span>${fmt(t.total)}</span></button>`;
+}
+// atualiza o botão e os ✓ dos passos enquanto a pessoa digita (sem redesenhar os campos)
+function atualizarCk() {
+  if (!S.ck || S.cmd !== 'checkout') return;
+  const p = problemasCk();
+  $$('#comanda .ck-sec[data-sec]').forEach(el => el.classList.toggle('ok', secaoOk(el.dataset.sec, p)));
+  const b = $('#ckFinalizar'); if (b) b.outerHTML = ckBotaoHTML();
+}
 
 function cmdCheckout() {
   const ck = S.ck, t = totais(ck.tipo);
+  const p = problemasCk();
   const bump = ck.bumpPid && S.porId.get(ck.bumpPid);
   const bi = bump && parseNome(bump.nome);
-  const pags = [{ k: 'pix', t: 'PIX' }, { k: 'dinheiro', t: 'Dinheiro' }, { k: 'cartao_credito', t: 'Crédito' }, { k: 'cartao_debito', t: 'Débito' }];
+  const pags = [
+    { k: 'pix', t: 'PIX', d: 'a chave aparece depois de enviar' },
+    { k: 'dinheiro', t: 'Dinheiro', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
+    { k: 'cartao_credito', t: 'Cartão de crédito', d: 'maquininha na hora' },
+    { k: 'cartao_debito', t: 'Cartão de débito', d: 'maquininha na hora' },
+  ];
+  const tit = (sec, n, txt) => `<h3 class="ck-tit"><i>${n}</i><span>${txt}</span></h3>`;
   const corpo = `
-    <button class="cmd-voltar" data-cmd-voltar>← voltar pra comanda</button>
-    <div class="ck-sec">
-      <p class="cmd-rot">1 · quem pede</p>
-      ${campo('ckNome', 'nome', ck.nome, 'autocomplete="name" placeholder="como te chamamos?"')}
-      ${campo('ckTel', 'whatsapp', mascaraTel(ck.tel), 'type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(44) 99999-9999"')}
+    <button class="cmd-voltar" data-cmd-voltar>← Voltar pra comanda</button>
+    <p class="ck-intro">Falta pouco: preencha os 3 passos e toque em <b>Enviar pedido</b>.</p>
+
+    <div class="ck-sec${secaoOk('dados', p) ? ' ok' : ''}" data-sec="dados">
+      ${tit('dados', 1, 'Seus dados')}
+      ${campo('ckNome', 'Seu nome', ck.nome, { extra: 'autocomplete="name" autocapitalize="words" placeholder="Ex.: Maria Souza"' })}
+      ${campo('ckTel', 'WhatsApp com DDD', mascaraTel(ck.tel), { extra: 'type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(44) 99999-9999"', dica: 'É por ele que a gente avisa quando o pedido sair.' })}
     </div>
-    <div class="ck-sec">
-      <p class="cmd-rot">2 · como receber</p>
+
+    <div class="ck-sec${secaoOk('entrega', p) ? ' ok' : ''}" data-sec="entrega">
+      ${tit('entrega', 2, 'Entrega ou retirada?')}
       <div class="ck-ops">
-        <button class="ck-op${ck.tipo === 'delivery' ? ' on' : ''}" data-tipo="delivery"><i class="caixa"></i><span><b>entrega</b><small>${t.gratis || ck.tipo === 'delivery' && t.taxa === 0 ? 'frete grátis' : fmt(num('taxa_entrega'))} · ${C.DEFAULTS.tempo_entrega}</small></span></button>
-        <button class="ck-op${ck.tipo === 'retirada' ? ' on' : ''}" data-tipo="retirada"><i class="caixa"></i><span><b>retirar no balcão</b><small>sem taxa · ${C.DEFAULTS.tempo_retirada}</small></span></button>
+        <button class="ck-op${ck.tipo === 'delivery' ? ' on' : ''}" data-tipo="delivery" aria-pressed="${ck.tipo === 'delivery'}"><i class="radio"></i><span><b>Entregar em casa</b><small>${t.gratis ? 'frete grátis' : 'taxa ' + fmt(num('taxa_entrega'))} · ${C.DEFAULTS.tempo_entrega}</small></span></button>
+        <button class="ck-op${ck.tipo === 'retirada' ? ' on' : ''}" data-tipo="retirada" aria-pressed="${ck.tipo === 'retirada'}"><i class="radio"></i><span><b>Vou buscar</b><small>sem taxa · ${C.DEFAULTS.tempo_retirada}</small></span></button>
       </div>
       ${ck.tipo === 'delivery' ? `
-        ${campo('ckRua', 'rua e nº', ck.rua, 'autocomplete="street-address" placeholder="av. paraná, 1234"')}
-        ${campo('ckBairro', 'bairro', ck.bairro, 'placeholder="bairro"')}
-        ${campo('ckComp', 'compl.', ck.comp, 'placeholder="ap, casa, referência"')}`
-        : `<p class="ck-nota">retirada em <b>${esc(valido(S.info.endereco) ? S.info.endereco : 'Choppatinhas, Umuarama-PR')}</b></p>`}
+        ${campo('ckRua', 'Rua e número', ck.rua, { extra: 'autocomplete="address-line1" placeholder="Ex.: Av. Paraná, 1234"' })}
+        ${campo('ckBairro', 'Bairro', ck.bairro, { extra: 'autocomplete="address-level3" placeholder="Ex.: Centro"' })}
+        ${campo('ckComp', 'Complemento', ck.comp, { opcional: true, extra: 'autocomplete="address-line2" placeholder="Ex.: Ap. 12, casa dos fundos"' })}`
+        : `<p class="ck-nota">📍 Retirada em <b>${esc(valido(S.info.endereco) ? S.info.endereco : 'Choppatinhas, Umuarama-PR')}</b></p>`}
     </div>
+
+    <div class="ck-sec${secaoOk('pag', p) ? ' ok' : ''}" data-sec="pag">
+      ${tit('pag', 3, 'Como vai pagar?')}
+      <div class="ck-pags${ck.erros.pag ? ' erro' : ''}" id="ckPags">${pags.map(o => `<button class="ck-op${ck.pag === o.k ? ' on' : ''}" data-pag="${o.k}" aria-pressed="${ck.pag === o.k}"><i class="radio"></i><span><b>${o.t}</b><small>${o.d}</small></span></button>`).join('')}</div>
+      <p class="ck-erro"${ck.erros.pag ? '' : ' hidden'}>${ck.erros.pag ? esc(ck.erros.pag) : ''}</p>
+      ${ck.pag === 'dinheiro' ? `
+        <p class="ck-perg">Precisa de troco?</p>
+        <div class="ck-sn">
+          <button class="ck-op curto${!ck.trocoSim ? ' on' : ''}" data-troco="nao"><i class="radio"></i><span><b>Não preciso</b></span></button>
+          <button class="ck-op curto${ck.trocoSim ? ' on' : ''}" data-troco="sim"><i class="radio"></i><span><b>Sim, preciso</b></span></button>
+        </div>
+        ${ck.trocoSim ? campo('ckTroco', 'Troco para quanto?', ck.troco, { extra: 'inputmode="decimal" placeholder="Ex.: 100"', dica: `O total é ${fmt(t.total)}.` }) : ''}` : ''}
+    </div>
+
     ${bump && (!S.carrinho.some(i => i.pid === bump.id) || ck.bumpOn) ? `
       <button class="ck-bump${ck.bumpOn ? ' on' : ''}" data-bump>
         <i class="caixa"></i>
         <span><em class="mao">sugestão da casa</em><b>${esc(nomeBonito(bi.base))}${bi.tam ? ` (${esc(bi.tam)})` : ''}</b><small>${ck.bumpOn ? 'anotado na comanda ✓' : ck.tipo === 'delivery' && t.falta > 0 && efetivo(bump) >= t.falta ? 'inclua e a entrega sai de graça' : 'toque pra incluir'}</small></span>
         <strong>+${fmtNum(efetivo(bump))}</strong>
       </button>` : ''}
+
     <div class="ck-sec">
-      <p class="cmd-rot">3 · pagamento</p>
-      <div class="ck-pags">${pags.map(p => `<button class="ck-op${ck.pag === p.k ? ' on' : ''}" data-pag="${p.k}"><i class="caixa"></i><span><b>${p.t}</b></span></button>`).join('')}</div>
-      ${ck.pag === 'dinheiro' ? campo('ckTroco', 'troco p/', ck.troco, 'inputmode="decimal" placeholder="vazio se não precisar"') : ''}
-      ${ck.pag && ck.pag !== 'pix' ? '<p class="ck-nota">pagamento na entrega / retirada.</p>' : ''}
-    </div>
-    <div class="ck-sec">
-      <p class="cmd-rot">4 · confere</p>
+      <h3 class="ck-tit sem-num"><span>Seu pedido</span></h3>
       <div class="ck-resumo">${S.carrinho.map(i => `<p><span>${i.qtd}x ${esc(i.titulo)}${i.sub ? ` (${esc(i.sub)})` : ''}</span><span>${fmtNum(i.preco * i.qtd)}</span></p>`).join('')}</div>
-      ${campo('ckObs', 'obs.', ck.obs, 'maxlength="200" placeholder="alguma observação?"')}
+      ${ck.obsAberta || ck.obs
+        ? campo('ckObs', 'Observação', ck.obs, { opcional: true, extra: 'maxlength="200" enterkeyhint="done" placeholder="Ex.: interfone com defeito, chamar no portão"' })
+        : '<button class="ck-mais-obs" data-ck-obs>+ Adicionar observação (opcional)</button>'}
     </div>`;
   const pe = `
     <div class="cmd-tot">
@@ -1141,21 +1212,24 @@ function cmdCheckout() {
       <p><span>${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}</span><span>${t.taxa === 0 ? 'grátis' : fmtNum(t.taxa)}</span></p>
       <p class="tot"><span>total</span><span>${fmt(t.total)}</span></p>
     </div>
-    <button class="cmd-btn verde" id="ckFinalizar" ${ck.enviando ? 'disabled' : ''}><span>${ck.enviando ? 'enviando…' : 'mandar pra cozinha'}</span><span>${ck.enviando ? '' : fmt(t.total)}</span></button>`;
+    ${ckBotaoHTML()}`;
   return { linha: 'fechando o pedido', corpo, pe };
 }
 
+// Toque no botão com algo faltando: mostra TODOS os avisos e leva até o primeiro
 function validarCheckout() {
   lerCampos();
-  const ck = S.ck; const erros = [];
-  if (ck.nome.length < 2) erros.push('#ckNome');
-  if (ck.tel.length < 10) erros.push('#ckTel');
-  if (ck.tipo === 'delivery') { if (ck.rua.length < 4) erros.push('#ckRua'); if (ck.bairro.length < 2) erros.push('#ckBairro'); }
-  $$('#comanda .ck-campo.erro').forEach(e => e.classList.remove('erro'));
-  erros.forEach(s => $(s)?.closest('.ck-campo')?.classList.add('erro'));
-  if (erros.length) { $(erros[0])?.scrollIntoView({ block: 'center', behavior: 'smooth' }); $(erros[0])?.focus({ preventScroll: true }); toast('confere os campos marcados', 'erro'); return false; }
-  if (!ck.pag) { toast('escolha a forma de pagamento', 'erro'); $('#comanda .ck-pags')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return false; }
-  return true;
+  const ck = S.ck;
+  const p = problemasCk();
+  ck.erros = Object.fromEntries(p.map(id => [id, msgCk(id)]));
+  if (!p.length) return true;
+  renderComanda();
+  const alvo = p[0] === 'pag' ? $('#ckPags') : $('#' + p[0]);
+  alvo?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  if (p[0] !== 'pag') setTimeout(() => $('#' + p[0])?.focus({ preventScroll: true }), 350);
+  navigator.vibrate?.(60);
+  rastrear('checkout_falta', { campo: p[0], faltando: p.length });
+  return false;
 }
 function telefoneBanco(d) { d = soDigitos(d); return d.length <= 11 ? '55' + d : d; }
 
@@ -1181,8 +1255,9 @@ async function finalizar() {
       if (r.error) throw r.error; cli = r.data;
     }
 
-    const obsPedido = [ck.obs, ck.pag === 'dinheiro' && ck.troco ? `Troco para R$ ${ck.troco}` : ''].filter(Boolean).join(' · ') || null;
-    const troco = parseFloat(String(ck.troco).replace(',', '.'));
+    const precisaTroco = ck.pag === 'dinheiro' && ck.trocoSim && ck.troco;
+    const obsPedido = [ck.obs, precisaTroco ? `Troco para R$ ${ck.troco}` : ''].filter(Boolean).join(' · ') || null;
+    const troco = precisaTroco ? parseFloat(String(ck.troco).replace(',', '.')) : NaN;
     const base = {
       cliente_id: cli.id, status: 'pendente', tipo_entrega: ck.tipo, endereco_entrega: endereco,
       forma_pagamento: ck.pag, troco_para: ck.pag === 'dinheiro' && troco > 0 ? troco : null,
@@ -1693,7 +1768,7 @@ const ALVOS = [
   '#capaPlay', '[data-ir]', '[data-anotar]', '[data-tam]', '[data-opc]', '[data-sem]', '[data-pdq]', '[data-junto]', '[data-pos-fim]', '[data-fechar-item]',
   '[data-add]', '[data-balde]', '[data-mais-pid]', '[data-menos-pid]', '[data-toque]', '[data-abre]',
   '[data-acompanhar]', '[data-repetir]',
-  '[data-cmd-fechar]', '[data-cmd-checkout]', '[data-cmd-voltar]', '[data-cmd-novo]', '[data-q]', '[data-sug]', '[data-tipo]', '[data-pag]', '[data-bump]', '#ckFinalizar', '[data-copiar]',
+  '[data-cmd-fechar]', '[data-cmd-checkout]', '[data-cmd-voltar]', '[data-cmd-novo]', '[data-q]', '[data-sug]', '[data-tipo]', '[data-pag]', '[data-bump]', '[data-troco]', '[data-ck-obs]', '#ckFinalizar', '[data-copiar]',
 ].join(',');
 
 function fonteDe(el) { return el.closest('.capa') ? 'destaque' : el.closest('.ranking') ? 'mais_pedidos' : S.busca ? 'busca' : 'cardapio'; }
@@ -1801,14 +1876,26 @@ function eventos() {
       const ck = S.ck; if (!ck) return;
       lerCampos();
       if (d.tipo) ck.tipo = d.tipo;
-      else if (d.pag) ck.pag = d.pag;
+      else if (d.pag) { ck.pag = d.pag; delete ck.erros.pag; if (d.pag !== 'dinheiro') { ck.trocoSim = false; delete ck.erros.ckTroco; } }
       else {
         const r = S.porId.get(ck.bumpPid); if (!r) return;
         if (ck.bumpOn) { const it = S.carrinho.find(i => i.pid === r.id && !i.obs); if (it) { it.qtd -= 1; if (it.qtd <= 0) S.carrinho = S.carrinho.filter(i => i !== it); salvarCarrinho(); renderAba(); atualizarMenu(); } ck.bumpOn = false; rastrear('oferta_desmarcada', { produto: nomeBonito(parseNome(r.nome).base) }); }
         else { addItem(itemRapido(r, 1, 'oferta_rapida'), false); renderAba(); atualizarMenu(); ck.bumpOn = true; rastrear('oferta_aceita', { produto: nomeBonito(parseNome(r.nome).base), valor: efetivo(r) }); }
       }
       renderComanda();
-      if (d.pag === 'dinheiro') $('#ckTroco')?.focus({ preventScroll: true });
+      return;
+    }
+    if (d.troco) {
+      const ck = S.ck; if (!ck) return;
+      lerCampos(); ck.trocoSim = d.troco === 'sim'; delete ck.erros.ckTroco;
+      renderComanda();
+      if (ck.trocoSim) $('#ckTroco')?.focus({ preventScroll: true });
+      return;
+    }
+    if ('ckObs' in d) {
+      if (!S.ck) return;
+      lerCampos(); S.ck.obsAberta = true; renderComanda();
+      $('#ckObs')?.focus({ preventScroll: true });
       return;
     }
     if (b.id === 'ckFinalizar') return finalizar();
@@ -1821,7 +1908,35 @@ function eventos() {
   $('#menu').addEventListener('input', e => { if (e.target.id === 'pdObs' && S.pd) S.pd.obs = e.target.value; });
   $('#comanda').addEventListener('input', e => {
     if (e.target.id === 'ckTel') { const p = e.target.selectionStart, antes = e.target.value.length; e.target.value = mascaraTel(e.target.value); const dif = e.target.value.length - antes; e.target.setSelectionRange(p + dif, p + dif); }
-    e.target.closest('.ck-campo')?.classList.remove('erro');
+    if (!S.ck) return;
+    lerCampos();
+    const id = e.target.id;
+    if (S.ck.erros[id] && !problemasCk().includes(id)) {
+      delete S.ck.erros[id];
+      const box = e.target.closest('.ck-campo'); box?.classList.remove('erro');
+      const m = box && $('.ck-erro', box); if (m) m.hidden = true;
+    }
+    atualizarCk();
+  });
+  $('#comanda').addEventListener('focusout', e => {
+    const id = e.target.id; if (!S.ck || !/^ck/.test(id) || !e.target.value.trim()) return;
+    lerCampos();
+    if (!problemasCk().includes(id)) return;
+    S.ck.erros[id] = msgCk(id);
+    const box = e.target.closest('.ck-campo'); box?.classList.add('erro');
+    const m = box && $('.ck-erro', box); if (m) { m.textContent = S.ck.erros[id]; m.hidden = false; }
+  });
+  // "próximo" do teclado pula pro campo seguinte; no último, fecha o teclado
+  $('#comanda').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    const campos = $('#comanda .ck-campo input');
+    const i = campos.indexOf(e.target);
+    if (i >= 0 && campos[i + 1]) campos[i + 1].focus(); else e.target.blur();
+  });
+  // ao abrir o teclado, o campo não fica escondido atrás dele
+  $('#comanda').addEventListener('focusin', e => {
+    if (e.target.tagName === 'INPUT' && matchMedia('(max-width: 1099px)').matches) setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 280);
   });
 
   $('#aba').addEventListener('click', () => abrirComanda('lista'));
