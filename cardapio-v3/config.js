@@ -12,11 +12,10 @@ window.CHOPP = {
   CANAL: 'cardapio_digital',   // pedidos.canal — separa o cardápio do WhatsApp nas métricas
   BUCKET: 'produto-fotos',
 
-  // Valores padrão se a chave não existir em info_restaurante
+  // Taxa de entrega fixa; os demais valores são padrões de info_restaurante.
   DEFAULTS: {
-    taxa_entrega: 6,
+    taxa_entrega: 10,
     pedido_minimo: 20,
-    frete_gratis_acima: 120,
     tempo_entrega: '40–60 min',
     tempo_retirada: '~20 min',
     horario: 'Fecha às 22:30',

@@ -365,11 +365,6 @@ body.com-trilho .trilho { transform: none; }
 .cmd-v { font-weight: 600; white-space: nowrap; }
 .cmd-ctl { grid-column: 2 / -1; display: flex; gap: 6px; margin-top: 4px; }
 .cmd-ctl button { height: 28px; min-width: 38px; padding: 0 9px; border: 1px solid var(--tinta); font-size: 11.5px; font-weight: 600; }
-.cmd-frete { margin: 16px 0 4px; padding: 12px 14px; border: 1.5px dashed var(--tinta); text-align: center; }
-.cmd-frete .ascii { margin: 4px 0 2px; font-size: 15px; letter-spacing: .04em; color: var(--verm); white-space: nowrap; overflow: hidden; }
-.cmd-frete .mao { font-size: 19px; }
-.cmd-frete.ok { border-color: var(--verde); }
-.cmd-frete.ok .ascii, .cmd-frete.ok .mao { color: var(--verde); }
 .cmd-sug { margin-top: 18px; }
 .cmd-sug .cmd-rot { padding-bottom: 6px; border-bottom: 1px solid var(--tinta); }
 .cmd-sug-it { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 11px 0 9px; border-bottom: 1px dotted var(--regua); font-size: 13px; text-transform: uppercase; }
@@ -456,13 +451,10 @@ body.com-trilho .trilho { transform: none; }
 .st-etapas li.feito .caixa::after, .st-etapas li.agora .caixa::after { content: '✓'; position: absolute; left: -1px; top: -12px; font-family: var(--f-mao); font-weight: 700; font-size: 24px; line-height: 1; color: var(--caneta); }
 .st-prev { margin-top: 14px; text-align: center; font-size: 21px; }
 .st-cancel { margin-top: 16px; text-align: center; font-size: 13px; color: var(--verm); }
-.st-pix { margin-top: 18px; padding: 14px; border: 1.5px dashed var(--tinta); font-size: 12.5px; }
-.st-pix .cmd-rot { margin-bottom: 6px; }
-.pix-chave { display: flex; gap: 8px; margin-top: 10px; }
-.pix-chave code { flex: 1; min-width: 0; padding: 10px; border: 1px dashed var(--tinta); font-family: var(--f-mono); font-size: 13px; overflow-x: auto; white-space: nowrap; }
-.pix-chave button { padding: 0 14px; background: var(--tinta); color: var(--papel); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
-.pix-valor { margin-top: 10px; }
-.pix-valor b { font-size: 16px; }
+.st-pag { margin-top: 18px; padding: 14px; border: 1.5px dashed var(--tinta); font-size: 12.5px; }
+.st-pag .cmd-rot { margin-bottom: 6px; }
+.st-pag p + p { margin-top: 10px; }
+.st-pag b { font-size: 16px; }
 
 /* aviso no topo */
 .aviso-topo { position: fixed; z-index: 400; top: 0; left: 0; right: 0; padding: 13px 16px; background: var(--tinta); color: var(--papel); font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; text-align: center; transform: translateY(-105%); transition: transform .3s var(--solta); pointer-events: none; }

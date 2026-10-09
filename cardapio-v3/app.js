@@ -335,11 +335,11 @@ function renderTopo() {
   el.innerHTML = lojaAberta() ? `<i></i>aberto${ate ? ' até ' + esc(ate[1]) : ''}` : '<i></i>fechado agora';
 }
 function renderLetreiro() {
-  const fg = num('frete_gratis_acima');
   const itens = [
     lojaAberta() ? `aberto agora · ${horarioTxt().toLowerCase()}` : 'fechado agora',
     S.pedidosHoje >= 3 ? `${S.pedidosHoje} pedidos hoje` : '',
-    fg > 0 ? `frete grátis acima de ${fmtCurto(fg)}` : '',
+    `taxa fixa de entrega: ${fmt(C.DEFAULTS.taxa_entrega)}`,
+    'pagamento na entrega ou na retirada',
     `entrega em ${C.DEFAULTS.tempo_entrega}`,
     `★ ${C.DEFAULTS.avaliacao} de avaliação`,
     'frango frito na hora',
@@ -761,7 +761,6 @@ function painelHTML(g) {
 
 function posHTML() {
   const { cands, aceitos } = S.pos;
-  const t = totais();
   return `
     <div class="painel pos">
       <p class="pos-ok mao">anotado! ✓</p>
@@ -769,8 +768,7 @@ function posHTML() {
         <p class="p-rot">vai bem junto</p>
         <div class="pos-lista">${cands.map(r => {
           const { base, tam } = parseNome(r.nome);
-          const libera = t.fg > 0 && !t.gratis && efetivo(r) >= t.falta;
-          return `<button class="pos-it${aceitos.has(r.id) ? ' on' : ''}" data-junto="${r.id}"><i class="caixa"></i><span>${esc(nomeBonito(base))}${tam ? ` <small>(${esc(tam)})</small>` : ''}${ehMolho(r) ? '<em class="mao">especial da casa!</em>' : libera ? '<em class="mao">libera o frete!</em>' : ''}</span><span class="pontos"></span><b>+${fmtNum(efetivo(r))}</b></button>`;
+          return `<button class="pos-it${aceitos.has(r.id) ? ' on' : ''}" data-junto="${r.id}"><i class="caixa"></i><span>${esc(nomeBonito(base))}${tam ? ` <small>(${esc(tam)})</small>` : ''}${ehMolho(r) ? '<em class="mao">especial da casa!</em>' : ''}</span><span class="pontos"></span><b>+${fmtNum(efetivo(r))}</b></button>`;
         }).join('')}</div>` : ''}
       <button class="pos-fim" data-pos-fim>${aceitos.size ? 'pronto, continuar →' : cands.length ? 'não, obrigado' : 'ok'}</button>
     </div>`;
@@ -826,7 +824,6 @@ function anotar(btn) {
   (g.opcoes || []).forEach((grp, i) => obs.push(`${grp.rotulo || grp.titulo}: ${S.pd.opc[i]}`));
   if (S.pd.sem.size) obs.push('Sem ' + [...S.pd.sem].join(', '));
   if (S.pd.obs.trim()) obs.push(S.pd.obs.trim());
-  const antes = totais();
   addItem({
     pid: p.prodDb.id, nomeDb: p.prodDb.nome, titulo: g.nome,
     sub: p.v.tam || '', preco: p.unit, qtd: S.pd.qtd, obs: obs.join(' · '),
@@ -841,7 +838,6 @@ function anotar(btn) {
   const tem = mostrarJunto(g);
   const el = refreshItem(g.key);
   carimbar(el);
-  avisarFrete(antes);
   if (!tem) setTimeout(() => { if (S.pos?.key === g.key && !S.pos.cands.length) fecharItem(g.key); }, 1600);
 }
 
@@ -898,10 +894,8 @@ function salvarCarrinho() { lsSet('chopp_carrinho', S.carrinho); }
 function subtotal() { return r2(S.carrinho.reduce((s, i) => s + i.preco * i.qtd, 0)); }
 function totais(tipo = 'delivery') {
   const sub = subtotal();
-  const fg = num('frete_gratis_acima');
-  const gratis = fg > 0 && sub >= fg;
-  const taxa = tipo === 'retirada' || gratis ? 0 : num('taxa_entrega');
-  return { sub, taxa, gratis, total: r2(sub + taxa), fg, falta: fg > 0 ? r2(Math.max(0, fg - sub)) : 0 };
+  const taxa = tipo === 'retirada' ? 0 : C.DEFAULTS.taxa_entrega;
+  return { sub, taxa, total: r2(sub + taxa) };
 }
 function grupoDaLinha(row) { return S.grupos.find(x => x.variantes.some(v => v.id === row.id)); }
 function itemRapido(row, qtd = 1, origem = 'cardapio', fonte = 'cardapio') {
@@ -909,25 +903,14 @@ function itemRapido(row, qtd = 1, origem = 'cardapio', fonte = 'cardapio') {
   const g = grupoDaLinha(row);
   return { pid: row.id, nomeDb: row.nome, titulo: nomeBonito(base), sub: tam || '', preco: efetivo(row), qtd, obs: '', secao: g?.secao || '', img: row.imagem_url || g?.img || null, origem, fonte };
 }
-function avisarFrete(antes) {
-  const depois = totais();
-  if (antes.fg > 0 && !antes.gratis && depois.gratis) {
-    toast('frete grátis desbloqueado!', 'ok');
-    carimbar(desktop() ? $('#comanda .cmd-papel') : $('#aba'), 'frete grátis', 'verde');
-    return true;
-  }
-  return false;
-}
 function addRapido(row, { qtd = 1, combina = true, origem = 'cardapio', fonte = 'cardapio' } = {}) {
   if (!lojaAberta()) return toast('estamos fechados agora — volta mais tarde!', 'erro');
   const g = grupoDaLinha(row);
-  const antes = totais();
   if (S.aberto && S.aberto !== g?.key) { const a = S.aberto; if (S.pos) encerrarPos(); S.aberto = null; S.pd = null; refreshItem(a); }
   addItem(itemRapido(row, qtd, origem, fonte));
   if (g && combina && mostrarJunto(g)) { S.aberto = g.key; S.pd = null; }
   const el = g ? refreshItem(g.key) : null;
   carimbar(el);
-  avisarFrete(antes);
 }
 
 // Aba da comanda (celular) — "imprime" a linha que acabou de entrar
@@ -938,7 +921,7 @@ function renderAba(novo) {
   if (!qtd) return;
   $('#abaQtd').textContent = `${qtd} ${qtd === 1 ? 'item' : 'itens'}`;
   $('#abaTotal').textContent = fmt(t.sub);
-  $('#abaMeta').textContent = t.fg > 0 ? (t.gratis ? 'frete grátis ✓' : `frete grátis em ${fmtCurto(r2(t.falta))}`) : '';
+  $('#abaMeta').textContent = `entrega: ${fmt(C.DEFAULTS.taxa_entrega)}`;
   if (novo && !desktop()) {
     const el = $('#abaImpressao');
     el.innerHTML = `<span>+ ${novo.qtd}x ${esc(novo.titulo)}${novo.sub ? ` (${esc(novo.sub)})` : ''}</span><b>${fmtNum(novo.preco * novo.qtd)}</b>`;
@@ -954,7 +937,7 @@ function abrirComanda(modo = 'lista') {
   S.cmd = modo;
   if (modo === 'lista') {
     validarCarrinho();
-    const t = totais(); rastrear('carrinho_aberto', { valor: t.sub, falta_frete: t.falta });
+    const t = totais(); rastrear('carrinho_aberto', { valor: t.sub });
   }
   renderComanda();
   $('#comanda .cmd-corpo').scrollTop = 0;
@@ -1000,16 +983,11 @@ function renderComanda() {
 function sugestoes() {
   const noCarrinho = new Set(S.carrinho.map(i => i.pid));
   const disponivel = r => r && r.disponivel !== false && !noCarrinho.has(r.id);
-  const t = totais();
   const out = [];
-  const push = (r, fecha) => { if (r && disponivel(r) && !out.some(o => o.r.id === r.id)) out.push({ r, fecha }); };
+  const push = r => { if (r && disponivel(r) && !out.some(o => o.r.id === r.id)) out.push({ r }); };
   const soMarmitex = S.carrinho.length > 0 && S.carrinho.every(i => i.secao === 'marmitex');
   const alcoolOk = oferecerAlcool() && !soMarmitex;
   const semAlcool = r => alcoolOk || !ehAlcool(r);
-  if (t.fg > 0 && !t.gratis && t.falta <= 60) {
-    S.rows.filter(r => disponivel(r) && semAlcool(r) && efetivo(r) >= t.falta && !/marmit/i.test(r.nome) && !/^(Combo)/i.test(r.nome))
-      .sort((a, b) => efetivo(a) - efetivo(b)).slice(0, 2).forEach(r => push(r, true));
-  }
   const peso = new Map(); const vistos = new Set();
   S.carrinho.forEach(it => {
     const g = S.grupos.find(x => x.variantes.some(v => v.id === it.pid));
@@ -1032,15 +1010,6 @@ function validarCarrinho() {
   if (removidos) { salvarCarrinho(); renderAba(); atualizarMenu(); toast(`${removidos} item${removidos > 1 ? 's' : ''} ficou indisponível e saiu da comanda`, 'erro'); }
 }
 
-function reguaFrete(t) {
-  const n = 16;
-  const cheio = Math.round(Math.min(1, t.sub / t.fg) * n);
-  return `<div class="cmd-frete${t.gratis ? ' ok' : ''}">
-    <p class="cmd-rot">frete grátis</p>
-    <p class="ascii">[${'■'.repeat(cheio)}${'·'.repeat(n - cheio)}]</p>
-    <p class="mao">${t.gratis ? 'garantido! a entrega é por nossa conta' : `faltam ${fmt(t.falta)}`}</p>
-  </div>`;
-}
 
 function cmdLista() {
   const qtd = S.carrinho.reduce((s, i) => s + i.qtd, 0);
@@ -1061,19 +1030,18 @@ function cmdLista() {
         <span class="cmd-ctl"><button data-q="-1" data-k="${esc(it.k)}">${it.qtd === 1 ? 'tirar' : '−1'}</button><button data-q="1" data-k="${esc(it.k)}">+1</button></span>
       </div>`).join('')}
     </div>
-    ${t.fg > 0 ? reguaFrete(t) : ''}
     ${sug.length ? `
       <div class="cmd-sug">
         <p class="cmd-rot">sugestões da casa</p>
-        ${sug.map(({ r, fecha }) => { const { base, tam } = parseNome(r.nome); return `
-          <button class="cmd-sug-it" data-sug="${r.id}" ${fecha ? 'data-fecha' : ''}>
-            <i>[+]</i><span>${esc(nomeBonito(base))}${tam ? ` (${esc(tam)})` : ''}${ehMolho(r) ? '<em class="mao">especial da casa</em>' : fecha ? '<em class="mao">libera o frete</em>' : ''}</span><span class="pontos"></span><b>${fmtNum(efetivo(r))}</b>
+        ${sug.map(({ r }) => { const { base, tam } = parseNome(r.nome); return `
+          <button class="cmd-sug-it" data-sug="${r.id}">
+            <i>[+]</i><span>${esc(nomeBonito(base))}${tam ? ` (${esc(tam)})` : ''}${ehMolho(r) ? '<em class="mao">especial da casa</em>' : ''}</span><span class="pontos"></span><b>${fmtNum(efetivo(r))}</b>
           </button>`; }).join('')}
       </div>` : ''}`;
   const pe = `
     <div class="cmd-tot">
       <p><span>subtotal</span><span>${fmtNum(t.sub)}</span></p>
-      <p><span>entrega</span><span>${t.gratis ? 'grátis' : fmtNum(t.taxa)}</span></p>
+      <p><span>taxa fixa de entrega</span><span>${fmtNum(t.taxa)}</span></p>
       <p class="tot"><span>total</span><span>${fmt(t.total)}</span></p>
     </div>
     ${t.sub < min ? `<p class="cmd-aviso">pedido mínimo de ${fmt(min)} — faltam ${fmt(r2(min - t.sub))}</p>` : ''}
@@ -1174,10 +1142,10 @@ function cmdCheckout() {
   const bump = ck.bumpPid && S.porId.get(ck.bumpPid);
   const bi = bump && parseNome(bump.nome);
   const pags = [
-    { k: 'pix', t: 'PIX', d: 'a chave aparece depois de enviar' },
+    { k: 'pix', t: 'PIX', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'dinheiro', t: 'Dinheiro', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
-    { k: 'cartao_credito', t: 'Cartão de crédito', d: 'maquininha na hora' },
-    { k: 'cartao_debito', t: 'Cartão de débito', d: 'maquininha na hora' },
+    { k: 'cartao_credito', t: 'Cartão de crédito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
+    { k: 'cartao_debito', t: 'Cartão de débito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
   ];
   const tit = (sec, n, txt) => `<h3 class="ck-tit"><i>${n}</i><span>${txt}</span></h3>`;
   const corpo = `
@@ -1193,7 +1161,7 @@ function cmdCheckout() {
     <div class="ck-sec${secaoOk('entrega', p) ? ' ok' : ''}" data-sec="entrega">
       ${tit('entrega', 2, 'Entrega ou retirada?')}
       <div class="ck-ops">
-        <button class="ck-op${ck.tipo === 'delivery' ? ' on' : ''}" data-tipo="delivery" aria-pressed="${ck.tipo === 'delivery'}"><i class="radio"></i><span><b>Entregar em casa</b><small>${t.gratis ? 'frete grátis' : 'taxa ' + fmt(num('taxa_entrega'))} · ${C.DEFAULTS.tempo_entrega}</small></span></button>
+        <button class="ck-op${ck.tipo === 'delivery' ? ' on' : ''}" data-tipo="delivery" aria-pressed="${ck.tipo === 'delivery'}"><i class="radio"></i><span><b>Entregar em casa</b><small>taxa fixa ${fmt(C.DEFAULTS.taxa_entrega)} · ${C.DEFAULTS.tempo_entrega}</small></span></button>
         <button class="ck-op${ck.tipo === 'retirada' ? ' on' : ''}" data-tipo="retirada" aria-pressed="${ck.tipo === 'retirada'}"><i class="radio"></i><span><b>Vou buscar</b><small>sem taxa · ${C.DEFAULTS.tempo_retirada}</small></span></button>
       </div>
       ${ck.tipo === 'delivery' ? `
@@ -1205,6 +1173,7 @@ function cmdCheckout() {
 
     <div class="ck-sec${secaoOk('pag', p) ? ' ok' : ''}" data-sec="pag">
       ${tit('pag', 3, 'Como vai pagar?')}
+      <p class="ck-nota">Todas as formas de pagamento são pagas na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}. Não é necessário pagar antecipadamente.</p>
       <div class="ck-pags${ck.erros.pag ? ' erro' : ''}" id="ckPags">${pags.map(o => `<button class="ck-op${ck.pag === o.k ? ' on' : ''}" data-pag="${o.k}" aria-pressed="${ck.pag === o.k}"><i class="radio"></i><span><b>${o.t}</b><small>${o.d}</small></span></button>`).join('')}</div>
       <p class="ck-erro"${ck.erros.pag ? '' : ' hidden'}>${ck.erros.pag ? esc(ck.erros.pag) : ''}</p>
       ${ck.pag === 'dinheiro' ? `
@@ -1219,7 +1188,7 @@ function cmdCheckout() {
     ${bump && (!S.carrinho.some(i => i.pid === bump.id) || ck.bumpOn) ? `
       <button class="ck-bump${ck.bumpOn ? ' on' : ''}" data-bump>
         <i class="caixa"></i>
-        <span><em class="mao">sugestão da casa</em><b>${esc(nomeBonito(bi.base))}${bi.tam ? ` (${esc(bi.tam)})` : ''}</b><small>${ck.bumpOn ? 'anotado na comanda ✓' : ck.tipo === 'delivery' && t.falta > 0 && efetivo(bump) >= t.falta ? 'inclua e a entrega sai de graça' : 'toque pra incluir'}</small></span>
+        <span><em class="mao">sugestão da casa</em><b>${esc(nomeBonito(bi.base))}${bi.tam ? ` (${esc(bi.tam)})` : ''}</b><small>${ck.bumpOn ? 'anotado na comanda ✓' : 'toque pra incluir'}</small></span>
         <strong>+${fmtNum(efetivo(bump))}</strong>
       </button>` : ''}
 
@@ -1233,7 +1202,7 @@ function cmdCheckout() {
   const pe = `
     <div class="cmd-tot">
       <p><span>subtotal</span><span>${fmtNum(t.sub)}</span></p>
-      <p><span>${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}</span><span>${t.taxa === 0 ? 'grátis' : fmtNum(t.taxa)}</span></p>
+      <p><span>${ck.tipo === 'retirada' ? 'retirada' : 'taxa fixa de entrega'}</span><span>${ck.tipo === 'retirada' ? 'sem taxa' : fmtNum(t.taxa)}</span></p>
       <p class="tot"><span>total</span><span>${fmt(t.total)}</span></p>
     </div>
     ${ckBotaoHTML()}`;
@@ -1299,7 +1268,7 @@ async function finalizar() {
     }
 
     const precisaTroco = ck.pag === 'dinheiro' && ck.trocoSim && ck.troco;
-    const obsPedido = [ck.obs, precisaTroco ? `Troco para R$ ${ck.troco}` : ''].filter(Boolean).join(' · ') || null;
+    const obsPedido = [ck.obs, precisaTroco ? `Troco para R$ ${ck.troco}` : '', `Pagamento na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}`].filter(Boolean).join(' · ');
     const troco = precisaTroco ? parseFloat(String(ck.troco).replace(',', '.')) : NaN;
     const base = {
       cliente_id: cli.id, status: 'pendente', tipo_entrega: ck.tipo, endereco_entrega: endereco,
@@ -1336,10 +1305,10 @@ async function finalizar() {
       porFonte[i.fonte || 'cardapio'] = r2((porFonte[i.fonte || 'cardapio'] || 0) + v);
       if (i.difTamanho && i.motivoTamanho !== 'escolha') ganhoTamanho = r2(ganhoTamanho + i.difTamanho * i.qtd);
     });
-    const receitaSug = r2(['combina', 'molho', 'libera_frete', 'vai_bem', 'oferta_rapida', 'latas6'].reduce((s2, o) => s2 + (porOrigem[o] || 0), 0));
+    const receitaSug = r2(['combina', 'molho', 'vai_bem', 'oferta_rapida', 'latas6'].reduce((s2, o) => s2 + (porOrigem[o] || 0), 0));
     rastrear('pedido_feito', {
       pedido_id: pedido.id, valor: t.total, subtotal: t.sub, taxa: t.taxa, tipo: ck.tipo, pagamento: ck.pag,
-      frete_gratis: ck.tipo === 'delivery' && t.taxa === 0, itens: S.carrinho.reduce((s2, i) => s2 + i.qtd, 0),
+      itens: S.carrinho.reduce((s2, i) => s2 + i.qtd, 0),
       por_origem: porOrigem, por_fonte: porFonte, receita_sugestoes: receitaSug, ganho_tamanho: ganhoTamanho,
     });
     enviarEventos();
@@ -1360,7 +1329,7 @@ function msgWhatsApp(u) {
   const sep = '━━━━━━━━━━━━━━━';
   const linhas = u.itens.map(i => `${i.qtd}x ${i.titulo}${i.sub ? ` (${i.sub})` : ''}  ${fmt(i.preco * i.qtd)}${i.obs ? `\n   _${i.obs}_` : ''}`).join('\n');
   const pagNome = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito', cartao_debito: 'Cartão de débito' }[u.pag] || u.pag;
-  return `Olá! Fiz um pedido pelo cardápio.\n\n*Pedido #${String(u.numero).padStart(3, '0')}*\n${sep}\n${linhas}\n${sep}\nSubtotal: ${fmt(u.sub)}\n${u.taxa > 0 ? `Entrega: ${fmt(u.taxa)}\n` : ''}*Total: ${fmt(u.total)}*\n\n${u.tipo === 'delivery' ? `📍 *Entrega em:*\n${u.endereco}` : '🛍️ *Retirada no local*'}\n\n💳 *Pagamento:* ${pagNome}${u.pag === 'pix' ? '\n\nSegue o comprovante 👇' : ''}`;
+  return `Olá! Fiz um pedido pelo cardápio.\n\n*Pedido #${String(u.numero).padStart(3, '0')}*\n${sep}\n${linhas}\n${sep}\nSubtotal: ${fmt(u.sub)}\n${u.taxa > 0 ? `Entrega: ${fmt(u.taxa)}\n` : ''}*Total: ${fmt(u.total)}*\n\n${u.tipo === 'delivery' ? `📍 *Entrega em:*\n${u.endereco}` : '🛍️ *Retirada no local*'}\n\n💳 *Pagamento:* ${pagNome} — na ${u.tipo === 'retirada' ? 'retirada' : 'entrega'}`;
 }
 async function abrirStatus(u, novo = false) {
   S.ult = u; S.stEtapa = novo ? null : etapaDe(u.status);
@@ -1386,7 +1355,6 @@ function cmdStatus() {
   const etapas = ETAPAS[u.tipo || 'delivery'];
   const bate = S.stEtapa !== et; S.stEtapa = et;
   const wa = soDigitos(S.info.whatsapp);
-  const chave = valido(S.info.chave_pix) ? S.info.chave_pix : '';
   const linkWa = wa.length >= 10 ? `https://wa.me/${wa.length <= 11 ? '55' + wa : wa}?text=${encodeURIComponent(msgWhatsApp(u))}` : '';
   const corpo = `
     <div class="st-topo">
@@ -1398,14 +1366,14 @@ function cmdStatus() {
     ${et < 0 ? '<p class="st-cancel">Este pedido foi cancelado pela casa. Fale com a gente no WhatsApp se tiver dúvida.</p>' : `
     <ol class="st-etapas">${etapas.map((e, i) => `<li class="${i < et || et === 3 ? 'feito' : i === et ? 'agora' : ''}"><i class="caixa"></i><span><b>${esc(e.t)}</b><small>${esc(e.d)}</small></span></li>`).join('')}</ol>
     ${et < 3 ? `<p class="st-prev mao">${u.tipo === 'delivery' ? `previsão: ${C.DEFAULTS.tempo_entrega}` : `fica pronto em ${C.DEFAULTS.tempo_retirada}`}</p>` : ''}`}
-    ${u.pag === 'pix' && et >= 0 && et < 3 ? `
-    <div class="st-pix">
-      <p class="cmd-rot">pagamento via pix</p>
-      ${chave ? `<p>copie a chave, pague e mande o comprovante no WhatsApp.</p><div class="pix-chave"><code id="pixChave">${esc(chave)}</code><button data-copiar="${esc(chave)}">copiar</button></div>` : '<p>a casa te manda a chave PIX no WhatsApp em instantes.</p>'}
-      <p class="pix-valor">valor: <b>${fmt(u.total)}</b></p>
+    ${et >= 0 ? `
+    <div class="st-pag">
+      <p class="cmd-rot">pagamento na ${u.tipo === 'retirada' ? 'retirada' : 'entrega'}</p>
+      <p>Você paga quando ${u.tipo === 'retirada' ? 'retirar o pedido na casa' : 'receber o pedido'}, inclusive se escolheu PIX.</p>
+      <p>valor: <b>${fmt(u.total)}</b></p>
     </div>` : ''}`;
   const pe = `
-    ${linkWa ? `<a class="cmd-btn verde" href="${linkWa}" target="_blank" rel="noopener"><span>${u.pag === 'pix' ? 'enviar comprovante' : 'falar com a casa'}</span><span>whatsapp →</span></a>` : ''}
+    ${linkWa ? `<a class="cmd-btn verde" href="${linkWa}" target="_blank" rel="noopener"><span>falar com a casa</span><span>whatsapp →</span></a>` : ''}
     <button class="cmd-link" data-cmd-novo>voltar ao cardápio</button>`;
   return { linha: `acompanhando · ${agoraTxt()}`, corpo, pe };
 }
@@ -1546,7 +1514,6 @@ async function carregarResultados() {
     const ganhoTam = r2(feitos.reduce((a, e) => a + Number(e.dados?.ganho_tamanho || 0), 0));
     const comSug = feitos.filter(e => Number(e.dados?.receita_sugestoes || 0) > 0), semSug = feitos.filter(e => !(Number(e.dados?.receita_sugestoes || 0) > 0));
     const mediaEv = l => l.length ? fmt(r2(l.reduce((a, e) => a + Number(e.valor || 0), 0) / l.length)) : '—';
-    const deliv = feitos.filter(e => e.dados?.tipo === 'delivery');
     const porVersao = v => { const f = feitos.filter(e => e.versao === v); return f.length ? `${f.length} · ${mediaEv(f)}` : '—'; };
     const linha = (nome, mostrado, aceito, receita, nota = '') => `<tr><td>${nome}${nota ? `<small>${nota}</small>` : ''}</td><td>${mostrado ?? '—'}</td><td>${aceito}</td><td>${mostrado ? pct(aceito, mostrado) : '—'}</td><td><b>${fmt(receita)}</b></td></tr>`;
     html += `
@@ -1572,7 +1539,6 @@ async function carregarResultados() {
         <tbody>
           ${linha('“Vai bem junto”', conta('combina_mostrado'), conta('combina_aceito'), somaOrigem('combina'))}
           ${linha('Oferta rápida', conta('oferta_mostrada'), conta('oferta_aceita'), somaOrigem('oferta_rapida'))}
-          ${linha('“Libera o frete”', null, aceitosOrigem('libera_frete'), somaOrigem('libera_frete'), 'na comanda')}
           ${linha('Sugestões da casa', null, aceitosOrigem('vai_bem'), somaOrigem('vai_bem'), 'na comanda')}
           ${linha('Tamanho maior', null, conta('upgrade_tamanho'), ganhoTam, 'botão + G pré-marcado')}
           ${linha('Molho especial da casa', conta('molho_mostrado'), aceitosOrigem('molho'), somaOrigem('molho'), 'sugerido com frango, combos e porções')}
@@ -1581,7 +1547,7 @@ async function carregarResultados() {
           ${linha('Os mais pedidos', null, E.filter(e => e.evento === 'produto_aberto' && e.dados?.fonte === 'mais_pedidos').length, somaFonte('mais_pedidos'))}
         </tbody>
       </table></div>
-      <p class="res-nota">* Receita = valor desses itens em pedidos que foram de fato enviados. Frete grátis em ${pct(deliv.filter(e => e.dados?.frete_gratis).length, deliv.length)} dos deliveries.</p>`;
+      <p class="res-nota">* Receita = valor desses itens em pedidos que foram de fato enviados.</p>`;
   }
   html += `<div class="adm-tg" style="margin-top:18px"><span><strong>Este aparelho é da equipe</strong><small>Ligado = o que você faz aqui não entra nas métricas (liga sozinho ao entrar no painel).</small></span><button class="sw${aparelhoEquipe() ? ' on' : ''}" data-adm-equipe></button></div>`;
   box.innerHTML = html;
@@ -1667,8 +1633,7 @@ function admLojaHTML() {
     <div class="adm-cfg">
       <div class="adm-tg"><span><strong>${lojaAberta() ? '🟢 Loja aberta' : '🔴 Loja fechada'}</strong><small>Fechada = ninguém consegue pedir pelo cardápio</small></span><button class="sw${lojaAberta() ? ' on' : ''}" data-adm-loja></button></div>
       <div class="adm-tg"><span><strong>${oferecerAlcool() ? '🍺 Sugerindo cerveja' : '🚫 Sem álcool nas sugestões'}</strong><small>Cerveja em lata entrega normalmente; desligue se preferir não sugerir.</small></span><button class="sw${oferecerAlcool() ? ' on' : ''}" data-adm-alcool></button></div>
-      ${campoCfg('taxa_entrega', 'Taxa de entrega (R$)')}
-      ${campoCfg('frete_gratis_acima', 'Frete grátis acima de (R$)', '0 = desliga')}
+      <p class="ck-nota"><b>Taxa fixa de entrega: ${fmt(C.DEFAULTS.taxa_entrega)}</b>. Retirada sem taxa. Pagamento na entrega ou na retirada.</p>
       ${campoCfg('pedido_minimo', 'Pedido mínimo (R$)')}
       ${campoCfg('whatsapp', 'WhatsApp da casa', 'com DDD, só números')}
       ${campoCfg('chave_pix', 'Chave PIX')}
@@ -1680,6 +1645,7 @@ function admLojaHTML() {
 }
 async function admSalvarCfg() {
   const linhas = $$('[data-cfg]').map(i => ({ chave: i.dataset.cfg, valor: i.value.trim() })).filter(l => l.valor !== '' || S.info[l.chave] !== undefined);
+  linhas.push({ chave: 'taxa_entrega', valor: String(C.DEFAULTS.taxa_entrega) }, { chave: 'frete_gratis_acima', valor: '0' }, { chave: 'formas_pagamento', valor: 'PIX, Dinheiro, Cartão de Débito e Crédito. Todas as formas de pagamento são pagas na entrega ou no momento da retirada.' });
   const { error } = await sb.from('info_restaurante').upsert(linhas, { onConflict: 'chave' });
   if (error) return toast('erro ao salvar: ' + error.message, 'erro');
   linhas.forEach(l => { S.info[l.chave] = l.valor; });
@@ -1811,7 +1777,7 @@ const ALVOS = [
   '#capaPlay', '[data-ir]', '[data-anotar]', '[data-tam]', '[data-opc]', '[data-sem]', '[data-pdq]', '[data-junto]', '[data-pos-fim]', '[data-fechar-item]',
   '[data-add]', '[data-balde]', '[data-mais-pid]', '[data-menos-pid]', '[data-toque]', '[data-abre]',
   '[data-acompanhar]', '[data-repetir]',
-  '[data-cmd-fechar]', '[data-cmd-checkout]', '[data-cmd-voltar]', '[data-cmd-novo]', '[data-q]', '[data-sug]', '[data-tipo]', '[data-pag]', '[data-bump]', '[data-troco]', '[data-ck-obs]', '#ckFinalizar', '[data-copiar]',
+  '[data-cmd-fechar]', '[data-cmd-checkout]', '[data-cmd-voltar]', '[data-cmd-novo]', '[data-q]', '[data-sug]', '[data-tipo]', '[data-pag]', '[data-bump]', '[data-troco]', '[data-ck-obs]', '#ckFinalizar',
 ].join(',');
 
 function fonteDe(el) { return el.closest('.capa') ? 'destaque' : el.closest('.ranking') ? 'mais_pedidos' : S.busca ? 'busca' : 'cardapio'; }
@@ -1864,11 +1830,9 @@ function eventos() {
         if (it) mudarQtd(it.k, -1);
         S.pos.aceitos.delete(r.id);
       } else {
-        const antes = totais();
         addItem(itemRapido(r, 1, ehMolho(r) ? 'molho' : 'combina'));
         S.pos.aceitos.add(r.id);
         rastrear('combina_aceito', { produto: nome, valor: efetivo(r) });
-        avisarFrete(antes);
       }
       refreshItem(S.pos.key);
       return;
@@ -1910,9 +1874,8 @@ function eventos() {
     if (d.q) return mudarQtd(d.k, +d.q);
     if (d.sug) {
       const r = S.porId.get(d.sug); if (!r) return;
-      const antes = totais();
-      addItem(itemRapido(r, 1, ehMolho(r) ? 'molho' : 'fecha' in d ? 'libera_frete' : 'vai_bem'), false);
-      renderAba(); atualizarMenu(); renderComanda(); avisarFrete(antes);
+      addItem(itemRapido(r, 1, ehMolho(r) ? 'molho' : 'vai_bem'), false);
+      renderAba(); atualizarMenu(); renderComanda();
       return;
     }
     if (d.tipo || d.pag || 'bump' in d) {
@@ -1942,10 +1905,6 @@ function eventos() {
       return;
     }
     if (b.id === 'ckFinalizar') return finalizar();
-    if (d.copiar) {
-      try { await navigator.clipboard.writeText(d.copiar); b.textContent = 'copiado ✓'; toast('chave pix copiada', 'ok'); }
-      catch { const r = document.createRange(); r.selectNodeContents($('#pixChave')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('segure para copiar a chave'); }
-    }
   });
 
   $('#menu').addEventListener('input', e => { if (e.target.id === 'pdObs' && S.pd) S.pd.obs = e.target.value; });
