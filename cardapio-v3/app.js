@@ -18,6 +18,7 @@ const S = {
   grupos: [],
   porId: new Map(),
   info: {},
+  infoCarregada: false,
   vendas: new Map(),
   vendasHoje: new Map(),
   pedidosHoje: 0,
@@ -203,11 +204,14 @@ function dicaTamanho(g) {
 }
 
 // ─── HORÁRIOS / REGRAS ──────────────────────────────────────────────────────
-const lojaAberta = () => String(S.info.loja_aberta ?? 'true') === 'true';
-const marmitexAgora = () => { const h = new Date().getHours(); return h >= C.MARMITEX.inicio && h < C.MARMITEX.fim; };
+const funcionamento = () => window.HorariosRestaurante.avaliarFuncionamento(S.info);
+const lojaLiberadaManualmente = () => String(S.info.loja_aberta ?? 'true') === 'true';
+const lojaAberta = () => S.infoCarregada && funcionamento().aberto;
+const mensagemFechada = () => S.infoCarregada ? funcionamento().mensagem : 'Nosso atendimento está indisponível no momento. Tente novamente mais tarde.';
+const marmitexAgora = () => { const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date())); return h >= C.MARMITEX.inicio && h < C.MARMITEX.fim; };
 const oferecerAlcool = () => String(S.info.oferecer_alcool ?? 'true') === 'true';
 const ehAlcool = r => /cerveja|chopp/i.test(r.nome);
-function horarioTxt() { return valido(S.info.horario) ? S.info.horario.replace(/\(.*?\)/g, '').trim() : C.DEFAULTS.horario; }
+function horarioTxt() { return funcionamento().horario || 'Horário indisponível'; }
 
 // Molho especial da casa (R$ 10): 1ª sugestão pra frango, combos e porções
 const ehMolho = r => !!r && r.nome === C.MOLHO_CASA;
@@ -265,6 +269,8 @@ async function carregar() {
     sb.from('info_restaurante').select('chave, valor'),
   ]);
   if (p.error) throw p.error;
+  if (i.error) throw i.error;
+  S.infoCarregada = true;
   S.rows = p.data || [];
   (i.data || []).forEach(r => { S.info[r.chave] = r.valor; });
   carregarVendas();
@@ -305,6 +311,26 @@ function renderTudo() {
   if (S.cmd === 'lista' && (S.cmdAberta || desktop())) renderComanda();
 }
 
+let ultimaDisponibilidade = '';
+function atualizarFuncionamento() {
+  const assinatura = JSON.stringify([lojaAberta(), horarioTxt(), S.info.loja_aberta, S.infoCarregada]);
+  if (assinatura === ultimaDisponibilidade) return;
+  ultimaDisponibilidade = assinatura;
+  renderTopo(); renderLetreiro(); renderRodape(); renderAba();
+  if (S.aberto) refreshItem(S.aberto);
+  if (S.cmd === 'checkout') atualizarCk();
+  else if (S.cmd === 'lista' && (S.cmdAberta || desktop())) renderComanda();
+}
+async function atualizarInfo() {
+  try {
+    const { data, error } = await sb.from('info_restaurante').select('chave, valor');
+    if (error || !data) throw error || new Error('Horários indisponíveis');
+    S.info = Object.fromEntries(data.map(r => [r.chave, r.valor]));
+    S.infoCarregada = true;
+  } catch { S.infoCarregada = false; }
+  atualizarFuncionamento();
+}
+
 function tempoReal() {
   const reagir = debounce(() => {
     renderTudo();
@@ -316,12 +342,7 @@ function tempoReal() {
       else { const i = S.rows.findIndex(r => r.id === n.id); if (i >= 0) S.rows[i] = n; else S.rows.push(n); }
       reagir();
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'info_restaurante' }, ({ new: n }) => {
-      if (!n?.chave) return;
-      S.info[n.chave] = n.valor;
-      renderTopo(); renderLetreiro(); renderRodape(); renderAba();
-      if (S.cmd === 'lista' && (S.cmdAberta || desktop())) renderComanda();
-    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'info_restaurante' }, () => { atualizarInfo(); })
     .subscribe();
 }
 
@@ -331,8 +352,9 @@ function tempoReal() {
 function renderTopo() {
   const el = $('#topoStatus');
   el.classList.toggle('fechado', !lojaAberta());
-  const ate = horarioTxt().match(/fecha\s+(?:às|as)\s+(.+)/i);
-  el.innerHTML = lojaAberta() ? `<i></i>aberto${ate ? ' até ' + esc(ate[1]) : ''}` : '<i></i>fechado agora';
+  const ate = funcionamento().fechaAs;
+  el.innerHTML = lojaAberta() ? `<i></i>aberto${ate ? ' até ' + esc(ate.replace(':', 'h')) : ''}` : '<i></i>fechado agora';
+  el.title = lojaAberta() ? horarioTxt() : mensagemFechada();
 }
 function renderLetreiro() {
   const itens = [
@@ -493,7 +515,7 @@ async function renderRetorno() {
 }
 function repetirPedido() {
   const rep = ls('chopp_repetir', null); if (!rep) return;
-  if (!lojaAberta()) return toast('estamos fechados agora — volta mais tarde!', 'erro');
+  if (!lojaAberta()) return toast(mensagemFechada(), 'erro');
   let ok = 0, fora = 0;
   rep.itens.forEach(it => {
     const row = S.porId.get(it.pid);
@@ -904,7 +926,7 @@ function itemRapido(row, qtd = 1, origem = 'cardapio', fonte = 'cardapio') {
   return { pid: row.id, nomeDb: row.nome, titulo: nomeBonito(base), sub: tam || '', preco: efetivo(row), qtd, obs: '', secao: g?.secao || '', img: row.imagem_url || g?.img || null, origem, fonte };
 }
 function addRapido(row, { qtd = 1, combina = true, origem = 'cardapio', fonte = 'cardapio' } = {}) {
-  if (!lojaAberta()) return toast('estamos fechados agora — volta mais tarde!', 'erro');
+  if (!lojaAberta()) return toast(mensagemFechada(), 'erro');
   const g = grupoDaLinha(row);
   if (S.aberto && S.aberto !== g?.key) { const a = S.aberto; if (S.pos) encerrarPos(); S.aberto = null; S.pd = null; refreshItem(a); }
   addItem(itemRapido(row, qtd, origem, fonte));
@@ -1045,7 +1067,7 @@ function cmdLista() {
       <p class="tot"><span>total</span><span>${fmt(t.total)}</span></p>
     </div>
     ${t.sub < min ? `<p class="cmd-aviso">pedido mínimo de ${fmt(min)} — faltam ${fmt(r2(min - t.sub))}</p>` : ''}
-    ${!lojaAberta() ? '<p class="cmd-aviso">estamos fechados agora. volta mais tarde!</p>' : ''}
+    ${!lojaAberta() ? '<p class="cmd-aviso">' + esc(mensagemFechada()).replace(/\n/g, '<br>') + '</p>' : ''}
     <button class="cmd-btn" data-cmd-checkout ${t.sub < min || !lojaAberta() ? 'disabled' : ''}><span>fechar pedido</span><span>→</span></button>`;
   return { linha, corpo, pe };
 }
@@ -1060,6 +1082,7 @@ function escolherBump() {
   return bebida || cands[0] || null;
 }
 function abrirCheckout() {
+  if (!lojaAberta()) return toast(mensagemFechada(), 'erro');
   validarCarrinho();
   if (!S.carrinho.length) return;
   const cli = ls('chopp_cliente', {});
@@ -1123,6 +1146,7 @@ const campo = (id, rot, val, { extra = '', dica = '', opcional = false } = {}) =
 };
 function ckBotaoHTML() {
   const ck = S.ck, t = totais(ck.tipo);
+  if (!lojaAberta()) return '<button class="cmd-btn" id="ckFinalizar" disabled><span>fechado agora</span></button>';
   if (ck.enviando) return '<button class="cmd-btn verde" id="ckFinalizar" disabled><span>enviando pedido…</span><span></span></button>';
   const p = problemasCk();
   if (p.length) return `<button class="cmd-btn falta" id="ckFinalizar"><span>Falta: ${CK_FALTA[p[0]]}</span><span>↑</span></button>`;
@@ -1134,6 +1158,7 @@ function atualizarCk() {
   const p = problemasCk();
   $$('#comanda .ck-sec[data-sec]').forEach(el => el.classList.toggle('ok', secaoOk(el.dataset.sec, p)));
   const b = $('#ckFinalizar'); if (b) b.outerHTML = ckBotaoHTML();
+  const aviso = $('#ckHorarioAviso'); if (aviso) { aviso.hidden = lojaAberta(); aviso.textContent = lojaAberta() ? '' : mensagemFechada(); }
 }
 
 function cmdCheckout() {
@@ -1205,6 +1230,7 @@ function cmdCheckout() {
       <p><span>${ck.tipo === 'retirada' ? 'retirada' : 'taxa fixa de entrega'}</span><span>${ck.tipo === 'retirada' ? 'sem taxa' : fmtNum(t.taxa)}</span></p>
       <p class="tot"><span>total</span><span>${fmt(t.total)}</span></p>
     </div>
+    <p class="cmd-aviso" id="ckHorarioAviso" ${lojaAberta() ? 'hidden' : ''}>${lojaAberta() ? '' : esc(mensagemFechada())}</p>
     ${ckBotaoHTML()}`;
   return { linha: 'fechando o pedido', corpo, pe };
 }
@@ -1243,11 +1269,17 @@ function variantesTelefone(num) {
 
 async function finalizar() {
   const ck = S.ck;
-  if (ck.enviando || !validarCheckout()) return;
+  if (ck.enviando) return;
+  if (!lojaAberta()) return toast(mensagemFechada(), 'erro');
+  if (!validarCheckout()) return;
   ck.enviando = true; renderComanda();
   try {
-    const { data: st } = await sb.from('info_restaurante').select('valor').eq('chave', 'loja_aberta').maybeSingle();
-    if (st && String(st.valor) !== 'true') { S.info.loja_aberta = st.valor; renderTopo(); throw new Error('FECHADA'); }
+    const { data: st, error: stErro } = await sb.from('info_restaurante').select('chave, valor');
+    if (stErro || !st) { S.infoCarregada = false; atualizarFuncionamento(); throw stErro || new Error('Horários indisponíveis'); }
+    S.info = Object.fromEntries(st.map(r => [r.chave, r.valor]));
+    S.infoCarregada = true;
+    atualizarFuncionamento();
+    if (!lojaAberta()) throw new Error('FECHADA');
     if (S.carrinho.some(i => i.secao === 'marmitex') && !marmitexAgora()) throw new Error('MARMITEX');
 
     const t = totais(ck.tipo);
@@ -1318,7 +1350,7 @@ async function finalizar() {
   } catch (e) {
     console.error(e);
     ck.enviando = false; renderComanda();
-    if (e.message === 'FECHADA') toast('a loja acabou de fechar. tenta mais tarde!', 'erro');
+    if (e.message === 'FECHADA' || /LOJA_FECHADA/.test(e.message)) toast(mensagemFechada(), 'erro');
     else if (e.message === 'MARMITEX') toast(`marmitex só das ${C.MARMITEX.inicio}h às ${C.MARMITEX.fim}h`, 'erro');
     else toast('não conseguimos enviar agora. confere a internet e tenta de novo', 'erro');
   }
@@ -1631,20 +1663,33 @@ function admLojaHTML() {
   const campoCfg = (k, rot, dica = '', tipo = 'text') => `<div><label class="rot">${rot} ${dica ? `<small>${dica}</small>` : ''}</label><input class="campo" data-cfg="${k}" type="${tipo}" value="${v(k)}"></div>`;
   return `
     <div class="adm-cfg">
-      <div class="adm-tg"><span><strong>${lojaAberta() ? '🟢 Loja aberta' : '🔴 Loja fechada'}</strong><small>Fechada = ninguém consegue pedir pelo cardápio</small></span><button class="sw${lojaAberta() ? ' on' : ''}" data-adm-loja></button></div>
+      <div class="adm-tg"><span><strong>${lojaLiberadaManualmente() ? '🟢 Pedidos habilitados' : '🔴 Pedidos pausados'}</strong><small>O horário de funcionamento também precisa estar aberto. Pause para fechar excepcionalmente.</small></span><button class="sw${lojaLiberadaManualmente() ? ' on' : ''}" data-adm-loja></button></div>
       <div class="adm-tg"><span><strong>${oferecerAlcool() ? '🍺 Sugerindo cerveja' : '🚫 Sem álcool nas sugestões'}</strong><small>Cerveja em lata entrega normalmente; desligue se preferir não sugerir.</small></span><button class="sw${oferecerAlcool() ? ' on' : ''}" data-adm-alcool></button></div>
       <p class="ck-nota"><b>Taxa fixa de entrega: ${fmt(C.DEFAULTS.taxa_entrega)}</b>. Retirada sem taxa. Pagamento na entrega ou na retirada.</p>
       ${campoCfg('pedido_minimo', 'Pedido mínimo (R$)')}
       ${campoCfg('whatsapp', 'WhatsApp da casa', 'com DDD, só números')}
       ${campoCfg('chave_pix', 'Chave PIX')}
-      ${campoCfg('horario', 'Horário', 'ex.: Aberto das 17h às 22h30')}
+      <div><label class="rot">Horário de funcionamento</label><p class="ck-nota">Horário de Brasília. Deixe os dois campos vazios nos dias fechados.</p>
+      ${[1, 2, 3, 4, 5, 6, 0].map(dia => {
+        let faixa; try { faixa = window.HorariosRestaurante.lerHorarios(S.info)[dia][0] || ['', '']; } catch { faixa = ['', '']; }
+        return '<div class="adm-horario"><span>' + window.HorariosRestaurante.DIAS[dia] + '</span><input class="campo" type="time" aria-label="Abertura ' + window.HorariosRestaurante.DIAS[dia] + '" data-hora-dia="' + dia + '" data-hora-tipo="inicio" value="' + esc(faixa[0]) + '"><span>às</span><input class="campo" type="time" aria-label="Fechamento ' + window.HorariosRestaurante.DIAS[dia] + '" data-hora-dia="' + dia + '" data-hora-tipo="fim" value="' + esc(faixa[1]) + '"></div>';
+      }).join('')}</div>
       ${campoCfg('endereco', 'Endereço')}
       ${campoCfg('painel_url', 'Link do painel de pedidos', 'opcional')}
       <button class="btn-cta full" data-adm-salvar-cfg>Salvar configurações</button>
     </div>`;
 }
 async function admSalvarCfg() {
+  const dias = {};
+  for (let dia = 0; dia < 7; dia++) {
+    const inicio = $('[data-hora-dia="' + dia + '"][data-hora-tipo="inicio"]').value;
+    const fim = $('[data-hora-dia="' + dia + '"][data-hora-tipo="fim"]').value;
+    dias[dia] = inicio || fim ? [[inicio, fim]] : [];
+  }
+  try { window.HorariosRestaurante.lerHorarios({ horarios_funcionamento: dias }); }
+  catch { return toast('Preencha abertura e fechamento de cada dia, ou deixe ambos vazios. O fechamento deve ser após a abertura.', 'erro'); }
   const linhas = $$('[data-cfg]').map(i => ({ chave: i.dataset.cfg, valor: i.value.trim() })).filter(l => l.valor !== '' || S.info[l.chave] !== undefined);
+  linhas.push({ chave: 'horarios_funcionamento', valor: JSON.stringify(dias) }, { chave: 'horario', valor: window.HorariosRestaurante.descrever(dias) });
   linhas.push({ chave: 'taxa_entrega', valor: String(C.DEFAULTS.taxa_entrega) }, { chave: 'frete_gratis_acima', valor: '0' }, { chave: 'formas_pagamento', valor: 'PIX, Dinheiro, Cartão de Débito e Crédito. Todas as formas de pagamento são pagas na entrega ou no momento da retirada.' });
   const { error } = await sb.from('info_restaurante').upsert(linhas, { onConflict: 'chave' });
   if (error) return toast('erro ao salvar: ' + error.message, 'erro');
@@ -1751,7 +1796,7 @@ function admEventos() {
     if ('admSemvideo' in d) { admGuardarForm(); Object.assign(ADM.edit, { _semVideo: true, _arquivoV: null, _previewV: null, video_url: null }); return admRender(); }
     if ('admExcluir' in d) return admExcluir();
     if (t.id === 'admSalvar') return admSalvarProduto();
-    if ('admLoja' in d) return admToggle('loja_aberta', lojaAberta(), ['loja aberta', 'loja fechada']);
+    if ('admLoja' in d) return admToggle('loja_aberta', lojaLiberadaManualmente(), ['loja aberta', 'loja fechada']);
     if ('admAlcool' in d) return admToggle('oferecer_alcool', oferecerAlcool(), ['sugestões de cerveja ligadas', 'sugestões de cerveja desligadas']);
     if ('admSalvarCfg' in d) return admSalvarCfg();
     if ('admEquipe' in d) { try { aparelhoEquipe() ? localStorage.removeItem('chopp_equipe') : localStorage.setItem('chopp_equipe', '1'); } catch { /* ok */ } t.classList.toggle('on', aparelhoEquipe()); return toast(aparelhoEquipe() ? 'este aparelho não conta nas métricas' : 'este aparelho volta a contar', 'ok'); }
@@ -1996,6 +2041,10 @@ async function init() {
   validarCarrinho(); renderAba(); renderComanda();
   renderRetorno();
   tempoReal();
+  setInterval(atualizarFuncionamento, 1000);
+  setInterval(atualizarInfo, 60_000);
+  addEventListener('focus', atualizarInfo);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarInfo(); });
   document.fonts?.ready.then(() => encaixar());
   rastrear('visita', { tela: innerWidth < 760 ? 'celular' : 'computador', ref: document.referrer ? new URL(document.referrer).hostname : '' });
   if (location.hash === '#admin') admAbrirSenha();

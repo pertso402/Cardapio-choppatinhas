@@ -582,3 +582,7 @@ body.com-trilho .trilho { transform: none; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   .letreiro-trilho { animation: none; }
 }
+
+/* Horários editáveis no painel da loja */
+.adm-horario { display:grid; grid-template-columns:minmax(64px,1fr) minmax(0,110px) auto minmax(0,110px); align-items:center; gap:6px; margin:8px 0; }
+.adm-horario .campo { min-width:0; padding:8px 4px; }
