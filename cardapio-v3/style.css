@@ -586,3 +586,5 @@ body.com-trilho .trilho { transform: none; }
 /* Horários editáveis no painel da loja */
 .adm-horario { display:grid; grid-template-columns:minmax(64px,1fr) minmax(0,110px) auto minmax(0,110px); align-items:center; gap:6px; margin:8px 0; }
 .adm-horario .campo { min-width:0; padding:8px 4px; }
+
+.pix-box{margin:16px 0;padding:14px;border:1px dashed currentColor}.pix-box p{margin:8px 0}.pix-chave{font-size:20px;font-weight:700;overflow-wrap:anywhere}.pix-box input[type=file]{width:100%;font-size:13px}.pix-box small{display:block;margin-top:8px}

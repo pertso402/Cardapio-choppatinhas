@@ -361,7 +361,7 @@ function renderLetreiro() {
     lojaAberta() ? `aberto agora · ${horarioTxt().toLowerCase()}` : 'fechado agora',
     S.pedidosHoje >= 3 ? `${S.pedidosHoje} pedidos hoje` : '',
     `taxa fixa de entrega: ${fmt(C.DEFAULTS.taxa_entrega)}`,
-    'pagamento na entrega ou na retirada',
+    S.info.pix_habilitado === 'true' ? 'Pix antecipado · cartão e dinheiro na entrega ou retirada' : 'pagamento na entrega ou na retirada',
     `entrega em ${C.DEFAULTS.tempo_entrega}`,
     `★ ${C.DEFAULTS.avaliacao} de avaliação`,
     'frango frito na hora',
@@ -1167,7 +1167,7 @@ function cmdCheckout() {
   const bump = ck.bumpPid && S.porId.get(ck.bumpPid);
   const bi = bump && parseNome(bump.nome);
   const pags = [
-    { k: 'pix', t: 'PIX', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
+    { k: 'pix', t: 'PIX', d: S.info.pix_habilitado === 'true' ? 'pagar e enviar comprovante' : `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'dinheiro', t: 'Dinheiro', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'cartao_credito', t: 'Cartão de crédito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'cartao_debito', t: 'Cartão de débito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
@@ -1198,7 +1198,7 @@ function cmdCheckout() {
 
     <div class="ck-sec${secaoOk('pag', p) ? ' ok' : ''}" data-sec="pag">
       ${tit('pag', 3, 'Como vai pagar?')}
-      <p class="ck-nota">Todas as formas de pagamento são pagas na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}. Não é necessário pagar antecipadamente.</p>
+      <p class="ck-nota">${ck.pag === 'pix' && S.info.pix_habilitado === 'true' ? 'Pix antecipado: no próximo passo você copia a chave e anexa o comprovante.' : 'Cartão e dinheiro são pagos na ' + (ck.tipo === 'retirada' ? 'retirada' : 'entrega') + '.'}</p>
       <div class="ck-pags${ck.erros.pag ? ' erro' : ''}" id="ckPags">${pags.map(o => `<button class="ck-op${ck.pag === o.k ? ' on' : ''}" data-pag="${o.k}" aria-pressed="${ck.pag === o.k}"><i class="radio"></i><span><b>${o.t}</b><small>${o.d}</small></span></button>`).join('')}</div>
       <p class="ck-erro"${ck.erros.pag ? '' : ' hidden'}>${ck.erros.pag ? esc(ck.erros.pag) : ''}</p>
       ${ck.pag === 'dinheiro' ? `
@@ -1286,6 +1286,16 @@ async function finalizar() {
     const tel = telefoneBanco(ck.tel);
     const endereco = ck.tipo === 'delivery' ? `${ck.rua}${ck.comp ? ', ' + ck.comp : ''} - ${ck.bairro}` : null;
 
+    if (ck.pag === 'pix' && S.info.pix_habilitado === 'true') {
+      const pedido = await window.PixCheckout.criar(sb, ck, S.carrinho, tel, endereco);
+      const ult = { id: pedido.id, numero: pedido.numero_pedido, total: Number(pedido.total), sub: Number(pedido.subtotal), taxa: Number(pedido.taxa_entrega), tipo: ck.tipo, pag: 'pix', endereco, nome: ck.nome, criado: Date.parse(pedido.criado_em), status: pedido.status, pixToken: pedido.pix_token, pixChave: pedido.chave_pix, pixRecebedor: pedido.recebedor, pixStatus: 'aguardando_comprovante', itens: S.carrinho.map(i => ({ ...i })) };
+      lsSet('chopp_cliente', { nome: ck.nome, tel: ck.tel, rua: ck.rua, bairro: ck.bairro, comp: ck.comp, tipo: ck.tipo, pag: ck.pag });
+      lsSet('chopp_ultimo', ult); lsSet('chopp_repetir', { itens: ult.itens });
+      rastrear('pedido_feito', { pedido_id: pedido.id, valor: ult.total, tipo: ck.tipo, pagamento: 'pix', aguardando_comprovante: true });
+      S.carrinho = []; salvarCarrinho(); S.ck = null; renderAba(); atualizarMenu();
+      await abrirStatus(ult, true); return;
+    }
+
     const { data: achados } = await sb.from('clientes')
       .select('id, total_pedidos, total_gasto, primeiro_pedido')
       .in('telefone', variantesTelefone(tel))
@@ -1358,31 +1368,70 @@ async function finalizar() {
 
 // ─── ACOMPANHAR ─────────────────────────────────────────────────────────────
 function msgWhatsApp(u) {
+  if (u.status === 'aguardando_pix') return `Olá! Vou enviar o comprovante do Pix do pedido #${u.numero}. Total: ${fmt(u.total)}.`;
+
   const sep = '━━━━━━━━━━━━━━━';
   const linhas = u.itens.map(i => `${i.qtd}x ${i.titulo}${i.sub ? ` (${i.sub})` : ''}  ${fmt(i.preco * i.qtd)}${i.obs ? `\n   _${i.obs}_` : ''}`).join('\n');
   const pagNome = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_credito: 'Cartão de crédito', cartao_debito: 'Cartão de débito' }[u.pag] || u.pag;
-  return `Olá! Fiz um pedido pelo cardápio.\n\n*Pedido #${String(u.numero).padStart(3, '0')}*\n${sep}\n${linhas}\n${sep}\nSubtotal: ${fmt(u.sub)}\n${u.taxa > 0 ? `Entrega: ${fmt(u.taxa)}\n` : ''}*Total: ${fmt(u.total)}*\n\n${u.tipo === 'delivery' ? `📍 *Entrega em:*\n${u.endereco}` : '🛍️ *Retirada no local*'}\n\n💳 *Pagamento:* ${pagNome} — na ${u.tipo === 'retirada' ? 'retirada' : 'entrega'}`;
+  return `Olá! Fiz um pedido pelo cardápio.\n\n*Pedido #${String(u.numero).padStart(3, '0')}*\n${sep}\n${linhas}\n${sep}\nSubtotal: ${fmt(u.sub)}\n${u.taxa > 0 ? `Entrega: ${fmt(u.taxa)}\n` : ''}*Total: ${fmt(u.total)}*\n\n${u.tipo === 'delivery' ? `📍 *Entrega em:*\n${u.endereco}` : '🛍️ *Retirada no local*'}\n\n💳 *Pagamento:* ${pagNome} — ${u.pixStatus === 'confirmado' ? 'recebimento conferido pela equipe' : 'na ' + (u.tipo === 'retirada' ? 'retirada' : 'entrega')}`;
 }
 async function abrirStatus(u, novo = false) {
   S.ult = u; S.stEtapa = novo ? null : etapaDe(u.status);
   abrirComanda('status');
   if (!novo) {
-    const { data } = await sb.from('pedidos').select('status').eq('id', u.id).maybeSingle();
-    if (data) { u.status = data.status; lsSet('chopp_ultimo', u); if (S.cmd === 'status') renderComanda(); }
+    const { data } = await sb.from('pedidos').select('status, pix_status, pix_resumo').eq('id', u.id).maybeSingle();
+    if (data) { u.status = data.status; u.pixStatus = data.pix_status; u.pixResumo = data.pix_resumo; lsSet('chopp_ultimo', u); if (S.cmd === 'status') renderComanda(); }
   }
   if (S.canalPedido) sb.removeChannel(S.canalPedido);
   S.canalPedido = sb.channel('pedido-' + u.id)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${u.id}` }, ({ new: n }) => {
       const antes = etapaDe(u.status);
-      u.status = n.status; lsSet('chopp_ultimo', u);
+      u.status = n.status; u.pixStatus = n.pix_status; u.pixResumo = n.pix_resumo; lsSet('chopp_ultimo', u);
       if (S.cmd === 'status') renderComanda();
       renderRetorno();
       if (etapaDe(n.status) > antes) { toast(ETAPAS[u.tipo][etapaDe(n.status)]?.t.toLowerCase() + '!', 'ok'); navigator.vibrate?.(120); }
     })
     .subscribe();
 }
+
+function cmdPix(u) {
+ const wa = soDigitos(S.info.whatsapp);
+ const linkWa = wa.length >= 10 ? 'https://wa.me/' + (wa.length <= 11 ? '55' + wa : wa) + '?text=' + encodeURIComponent(msgWhatsApp(u)) : '';
+ const recebido = ['em_analise', 'em_conferencia', 'inconclusivo', 'divergente'].includes(u.pixStatus);
+ const aguardando = ['em_analise', 'em_conferencia'].includes(u.pixStatus);
+ const titulo = u.pixStatus === 'em_analise' ? 'comprovante recebido' : u.pixStatus === 'em_conferencia' ? 'aguardando conferência' : u.pixStatus === 'divergente' ? 'confira o comprovante' : u.pixStatus === 'inconclusivo' ? 'a equipe vai conferir' : 'aguardando seu Pix';
+ const motivos = Array.isArray(u.pixResumo?.motivos) ? u.pixResumo.motivos : [];
+ const dados = '<p><b>Valor exato: ' + fmt(u.total) + '</b></p><p>Destinatário: ' + esc(u.pixRecebedor || 'Choppatinhas') + '</p><p>CNPJ / chave Pix:</p><p class="pix-chave">' + esc(u.pixChave || S.info.chave_pix || '') + '</p><button class="cmd-btn" data-pix-copiar><span>Copiar chave Pix</span><span>⧉</span></button>';
+ const corpo = '<div class="st-topo"><p class="cmd-rot">pedido reservado</p><p class="st-num">Nº ' + String(u.numero).padStart(3, '0') + '</p><p class="st-sub">' + fmt(u.total) + '</p><span class="carimbo st-carimbo">' + esc(titulo) + '</span></div>' +
+ (recebido ? '<details class="pix-box"><summary>Dados do pagamento para conferência</summary>' + dados + '</details>' : '<div class="pix-box"><p>Faça o Pix no aplicativo do seu banco e anexe o comprovante aqui.</p>' + dados + '</div>') +
+ (recebido ? '<p class="ck-nota">' + (u.pixStatus === 'em_conferencia' ? 'Os dados estão compatíveis com o pedido. Falta a equipe confirmar o recebimento na conta.' : u.pixStatus === 'em_analise' ? 'O agente está comparando o arquivo com o seu pedido. Você pode sair desta tela e voltar depois.' : 'A equipe pode ajudar na conferência. Você também pode reenviar um arquivo legível.') + ' Se já pagou, não repita o Pix.</p>' : '') +
+ (motivos.length ? '<p class="cmd-aviso">' + motivos.map(esc).join('<br>') + '</p>' : '') +
+ '<div class="pix-box"><label class="rot" for="pixArquivo">' + (recebido ? 'Substituir arquivo, se necessário' : 'Anexar comprovante') + '</label><input class="campo" id="pixArquivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" ' + (S.pixEnviando ? 'disabled' : '') + '><small>PDF, JPG, PNG ou WebP · até 5 MB</small><p role="status">' + (S.pixEnviando ? 'Enviando comprovante…' : u.pixArquivo ? 'Arquivo recebido: ' + esc(u.pixArquivo) : '') + '</p></div><p class="ck-nota">A equipe confere o recebimento na conta para liberar o preparo.</p>';
+ const pe = '<button class="cmd-btn verde" data-pix-anexar ' + (S.pixEnviando || aguardando ? 'disabled' : '') + '><span>' + (S.pixEnviando ? 'enviando…' : aguardando ? 'comprovante recebido' : recebido ? 'Reenviar comprovante' : 'Anexar PDF ou imagem') + '</span><span>↑</span></button>' +
+ (linkWa ? '<a class="cmd-link" href="' + esc(linkWa) + '" target="_blank" rel="noopener">Enviar pelo WhatsApp →</a>' : '') + '<button class="cmd-link" data-cmd-novo>voltar ao cardápio</button>';
+ return { linha: 'pagamento Pix', corpo, pe };
+}
+async function enviarComprovantePix(file) {
+ if(S.pixEnviando||!file||S.ult?.status!=='aguardando_pix')return;
+ const u=S.ult;S.pixEnviando=true;renderComanda();
+ try{await window.PixCheckout.anexar(sb,u,file);u.pixStatus='em_analise';u.pixArquivo=file.name;u.pixResumo=null;lsSet('chopp_ultimo',u);toast('Comprovante recebido. Vamos conferir os dados.','ok');}
+ catch(e){toast(e.message||'Não foi possível anexar. Tente novamente ou envie pelo WhatsApp.','erro');}
+ finally{S.pixEnviando=false;if(S.ult===u&&S.cmd==='status')renderComanda();}
+}
+async function atualizarPix() {
+ const u=S.ult;if(!u?.pixToken||u.status!=='aguardando_pix')return;
+ try{const p=await window.PixCheckout.consultar(sb,u);const mudou=JSON.stringify([u.status,u.pixStatus,u.pixResumo])!==JSON.stringify([p.status,p.pix_status,p.pix_resumo]);u.status=p.status;u.pixStatus=p.pix_status;u.pixResumo=p.pix_resumo;lsSet('chopp_ultimo',u);if(mudou&&S.cmd==='status')renderComanda();}catch(e){console.warn('Não foi possível atualizar o Pix',e.message);}
+}
+async function retomarPixDoLink() {
+ const m=location.hash.match(/^#pix=([0-9a-f-]{36})\.([0-9a-f-]{36})$/i);if(!m)return;
+ const pedido={id:m[1],pixToken:m[2]};
+ try{const p=await window.PixCheckout.consultar(sb,pedido);await abrirStatus({...pedido,numero:p.numero_pedido,total:Number(p.total),status:p.status,pag:'pix',tipo:p.tipo_entrega||'delivery',endereco:p.endereco,sub:Number(p.subtotal),taxa:Number(p.taxa_entrega),pixChave:p.chave_pix,pixRecebedor:p.recebedor,pixStatus:p.pix_status,pixResumo:p.pix_resumo,itens:(p.itens||[]).map(i=>({titulo:i.nome,qtd:i.quantidade,preco:i.preco_unitario,obs:i.observacao}))},true);}
+ catch{toast('Não foi possível abrir o pedido. Confira o link ou fale com a casa.','erro');}
+}
+
 function cmdStatus() {
   const u = S.ult;
+  if (u.status === 'aguardando_pix') return cmdPix(u);
   const et = etapaDe(u.status);
   const etapas = ETAPAS[u.tipo || 'delivery'];
   const bate = S.stEtapa !== et; S.stEtapa = et;
@@ -1400,8 +1449,8 @@ function cmdStatus() {
     ${et < 3 ? `<p class="st-prev mao">${u.tipo === 'delivery' ? `previsão: ${C.DEFAULTS.tempo_entrega}` : `fica pronto em ${C.DEFAULTS.tempo_retirada}`}</p>` : ''}`}
     ${et >= 0 ? `
     <div class="st-pag">
-      <p class="cmd-rot">pagamento na ${u.tipo === 'retirada' ? 'retirada' : 'entrega'}</p>
-      <p>Você paga quando ${u.tipo === 'retirada' ? 'retirar o pedido na casa' : 'receber o pedido'}, inclusive se escolheu PIX.</p>
+      <p class="cmd-rot">${u.pixStatus === 'confirmado' ? 'Pix conferido pela equipe' : 'pagamento na ' + (u.tipo === 'retirada' ? 'retirada' : 'entrega')}</p>
+      <p>${u.pixStatus === 'confirmado' ? 'Recebimento confirmado. Seu pedido segue no atendimento.' : 'Você paga quando ' + (u.tipo === 'retirada' ? 'retirar o pedido na casa' : 'receber o pedido') + '.'}</p>
       <p>valor: <b>${fmt(u.total)}</b></p>
     </div>` : ''}`;
   const pe = `
@@ -1665,6 +1714,7 @@ function admLojaHTML() {
     <div class="adm-cfg">
       <div class="adm-tg"><span><strong>${lojaLiberadaManualmente() ? '🟢 Pedidos habilitados' : '🔴 Pedidos pausados'}</strong><small>O horário de funcionamento também precisa estar aberto. Pause para fechar excepcionalmente.</small></span><button class="sw${lojaLiberadaManualmente() ? ' on' : ''}" data-adm-loja></button></div>
       <div class="adm-tg"><span><strong>${oferecerAlcool() ? '🍺 Sugerindo cerveja' : '🚫 Sem álcool nas sugestões'}</strong><small>Cerveja em lata entrega normalmente; desligue se preferir não sugerir.</small></span><button class="sw${oferecerAlcool() ? ' on' : ''}" data-adm-alcool></button></div>
+      <div class="adm-tg"><span><strong>Pix com comprovante</strong><small>Cliente paga antes e envia PDF ou imagem. A equipe confere o recebimento antes de liberar.</small></span><button class="sw${S.info.pix_habilitado === 'true' ? ' on' : ''}" data-adm-pix></button></div>
       <p class="ck-nota"><b>Taxa fixa de entrega: ${fmt(C.DEFAULTS.taxa_entrega)}</b>. Retirada sem taxa. Pagamento na entrega ou na retirada.</p>
       ${campoCfg('pedido_minimo', 'Pedido mínimo (R$)')}
       ${campoCfg('whatsapp', 'WhatsApp da casa', 'com DDD, só números')}
@@ -1690,7 +1740,7 @@ async function admSalvarCfg() {
   catch { return toast('Preencha abertura e fechamento de cada dia, ou deixe ambos vazios. O fechamento deve ser após a abertura.', 'erro'); }
   const linhas = $$('[data-cfg]').map(i => ({ chave: i.dataset.cfg, valor: i.value.trim() })).filter(l => l.valor !== '' || S.info[l.chave] !== undefined);
   linhas.push({ chave: 'horarios_funcionamento', valor: JSON.stringify(dias) }, { chave: 'horario', valor: window.HorariosRestaurante.descrever(dias) });
-  linhas.push({ chave: 'taxa_entrega', valor: String(C.DEFAULTS.taxa_entrega) }, { chave: 'frete_gratis_acima', valor: '0' }, { chave: 'formas_pagamento', valor: 'PIX, Dinheiro, Cartão de Débito e Crédito. Todas as formas de pagamento são pagas na entrega ou no momento da retirada.' });
+  linhas.push({ chave: 'taxa_entrega', valor: String(C.DEFAULTS.taxa_entrega) }, { chave: 'frete_gratis_acima', valor: '0' }, { chave: 'formas_pagamento', valor: S.info.pix_habilitado === 'true' ? 'Pix antecipado com envio de comprovante. Dinheiro e cartões na entrega ou retirada.' : 'PIX, Dinheiro, Cartão de Débito e Crédito. Todas as formas de pagamento são pagas na entrega ou no momento da retirada.' });
   const { error } = await sb.from('info_restaurante').upsert(linhas, { onConflict: 'chave' });
   if (error) return toast('erro ao salvar: ' + error.message, 'erro');
   linhas.forEach(l => { S.info[l.chave] = l.valor; });
@@ -1781,7 +1831,7 @@ function admGuardarForm() {
 }
 function admEventos() {
   const adm = $('#adm');
-  adm.addEventListener('click', e => {
+  adm.addEventListener('click', async e => {
     const t = e.target.closest('button, [data-adm-cancelar]'); if (!t) return;
     const d = t.dataset;
     if ('admFechar' in d) return admFechar();
@@ -1797,6 +1847,13 @@ function admEventos() {
     if ('admExcluir' in d) return admExcluir();
     if (t.id === 'admSalvar') return admSalvarProduto();
     if ('admLoja' in d) return admToggle('loja_aberta', lojaLiberadaManualmente(), ['loja aberta', 'loja fechada']);
+    if ('admPix' in d) {
+      if (S.info.pix_habilitado !== 'true') {
+        const { data, error } = await sb.rpc('pix_integracao_pronta');
+        if (error || data !== true) return toast('O atendimento Pix ainda não está disponível. Aguarde a configuração da equipe.', 'erro');
+      }
+      return admToggle('pix_habilitado', S.info.pix_habilitado === 'true', ['Pix com comprovante ativado', 'Pix com comprovante desativado']);
+    }
     if ('admAlcool' in d) return admToggle('oferecer_alcool', oferecerAlcool(), ['sugestões de cerveja ligadas', 'sugestões de cerveja desligadas']);
     if ('admSalvarCfg' in d) return admSalvarCfg();
     if ('admEquipe' in d) { try { aparelhoEquipe() ? localStorage.removeItem('chopp_equipe') : localStorage.setItem('chopp_equipe', '1'); } catch { /* ok */ } t.classList.toggle('on', aparelhoEquipe()); return toast(aparelhoEquipe() ? 'este aparelho não conta nas métricas' : 'este aparelho volta a contar', 'ok'); }
@@ -1828,6 +1885,9 @@ const ALVOS = [
 function fonteDe(el) { return el.closest('.capa') ? 'destaque' : el.closest('.ranking') ? 'mais_pedidos' : S.busca ? 'busca' : 'cardapio'; }
 
 function eventos() {
+  document.addEventListener('click', e => { if (e.target.closest('[data-pix-anexar]')) $('#pixArquivo')?.click(); });
+  document.addEventListener('change', e => { if (e.target.id === 'pixArquivo') enviarComprovantePix(e.target.files?.[0]); });
+  document.addEventListener('click', async e => { if (e.target.closest('[data-pix-copiar]')) { try { await navigator.clipboard.writeText(S.ult?.pixChave || S.info.chave_pix || ''); toast('Chave Pix copiada', 'ok'); } catch { toast('Selecione e copie a chave Pix exibida na tela.'); } } });
   const abrirBusca = () => { $('#busca').hidden = false; $('#buscaInput').focus(); };
   const fecharBusca = () => { $('#busca').hidden = true; $('#buscaInput').value = ''; S.busca = ''; renderMenu(); };
   $('#btnBusca').addEventListener('click', () => ($('#busca').hidden ? abrirBusca() : fecharBusca()));
@@ -2041,6 +2101,8 @@ async function init() {
   validarCarrinho(); renderAba(); renderComanda();
   renderRetorno();
   tempoReal();
+  await retomarPixDoLink();
+  setInterval(atualizarPix, 5000);
   setInterval(atualizarFuncionamento, 1000);
   setInterval(atualizarInfo, 60_000);
   addEventListener('focus', atualizarInfo);

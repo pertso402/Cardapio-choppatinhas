@@ -50,3 +50,12 @@ agente: basta executar uma das cópias. Não reaplique depois de personalizar a 
 
 Para publicar esta versão, use Root Directory `cardapio-v3` na Vercel, sem build.
 Teste a regra e o checkout com `node --test test/horarios.test.cjs` na raiz do repo.
+
+## Pix antecipado com comprovante (v3)
+
+A versão v3 permite anexar PDF, JPG, PNG e WebP até 5 MB ou enviar pelo WhatsApp.
+Execute `supabase/004_pix_assistido.sql` no Supabase (mesma migração `pix.sql` do
+agente/painel), atualize o agente e publique os sites antes de ativar em Loja →
+Pix com comprovante. O código privado exibido ao executar o SQL é somente da
+equipe para liberar recebimentos no painel. Não o publique. O envio do arquivo
+nunca confirma o crédito automaticamente. O pedido mantém o número nos dois canais.
