@@ -31,7 +31,7 @@ window.CHOPP = {
     { id: 'frango',  nome: 'Frango',           sub: 'O prato mais pedido da casa, feito na hora',  icon: 'drum',    match: p => p.categoria === 'Porções' && /frango/i.test(p.base) },
     { id: 'combos',  nome: 'Combos da Casa',   sub: 'Pratos completos, feitos para compartilhar',  icon: 'flame',   match: p => p.categoria === 'Porções' && /^combo/i.test(p.base) },
     { id: 'porcoes', nome: 'Porções',          sub: 'Todas acompanham o nosso molho branco',       icon: 'drum',    match: p => p.categoria === 'Porções' && !/^(arroz|salada|porção de batata frita|porção de polenta frita|molho especial da casa)$/i.test(p.base) },
-    { id: 'pizzas',  nome: 'Pizzas',           sub: 'Até 2 sabores na mesma pizza',                icon: 'pizza',   match: p => p.categoria === 'Pizzas' },
+    { id: 'pizzas',  nome: 'Pizzas',           sub: 'Massa tradicional, assada na hora',            icon: 'pizza',   match: p => p.categoria === 'Pizzas' },
     { id: 'lanches', nome: 'Lanches',          sub: 'Preparados na chapa, na hora do pedido',   icon: 'burger',  match: p => p.categoria === 'Lanches' },
     { id: 'acomp',   nome: 'Acompanhamentos',  sub: 'Para completar o seu pedido',                        icon: 'fries',   match: p => p.categoria === 'Porções' },
     { id: 'caldos',  nome: 'Caldos',           sub: 'Cremosos e encorpados, com carne seca',        icon: 'soup',    match: p => p.categoria === 'Caldos' },

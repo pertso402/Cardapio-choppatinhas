@@ -95,7 +95,7 @@ function limparDesc(desc) {
   return d.replace(/^[\s,;]+|[\s,;]+$/g, '').replace(/^porção$/i, '');
 }
 const efetivo = r => { const pp = Number(r.preco_promocional); return pp > 0 && pp < Number(r.preco) ? pp : Number(r.preco); };
-const copyDe = g => C.COPY[g.base.toLowerCase()] || C.COPY_SECAO[g.secao] || '';
+const copyDe = g => C.COPY[g.base.toLowerCase()] || C.COPY[g.base.toLowerCase().replace(/^pizza\s+/, '')] || C.COPY_SECAO[g.secao] || '';
 const midiaDe = (nome, secao, img) => img
   ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">`
   : window.ChoppArt.svg(nome, secao);
@@ -234,6 +234,10 @@ function candidatosPara(g, max = 4) {
     if (!temArrozSalada && !ehArrozOuSalada) add(['Arroz', 'Salada']);
     if (alcoolOk) add(['Cerveja Brahma', 'Cerveja Skol']);
     add(['Guaraná Antarctica', 'Pepsi Lata', 'Suco De Maracujá Polpa']);
+  } else if (g.secao === 'pizzas') {
+    const doce = /prest[ií]gio|sensa[cç][aã]o|chocolate/i.test(g.base + ' ' + (g.descricao || ''));
+    if (alcoolOk && !doce) add(['Cerveja Brahma', 'Cerveja Skol']);
+    add(['Guaraná Antarctica', 'Pepsi Lata', 'Suco De Maracujá Polpa']);
   } else if (g.secao === 'lanches') {
     if (!/waffel/i.test(g.base)) add(['Porção De Batata Frita (M)']);
     add(['Guaraná Antarctica', 'Pepsi Lata', 'Sukita Lata']);
@@ -256,7 +260,7 @@ function candidatosPara(g, max = 4) {
   if (iMolho > 0) lista.unshift(...lista.splice(iMolho, 1));
   return lista.slice(0, max);
 }
-const SECOES_COMBINA = new Set(['frango', 'combos', 'porcoes', 'lanches', 'caldos', 'marmitex']);
+const SECOES_COMBINA = new Set(['frango', 'combos', 'porcoes', 'pizzas', 'lanches', 'caldos', 'marmitex']);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARREGAMENTO
