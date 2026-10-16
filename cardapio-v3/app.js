@@ -2060,9 +2060,16 @@ function eventos() {
     document.body.classList.toggle('com-trilho', !e.isIntersecting && e.boundingClientRect.top < 0);
   }).observe($('#indice'));
 
+  // No Android, abrir o teclado ENCOLHE a tela e dispara "resize". Redesenhar a
+  // comanda aqui recriava os campos do checkout: o campo perdia o foco, o
+  // teclado fechava e não dava pra digitar. Agora só redesenha quando o layout
+  // troca de verdade (celular ↔ computador); mudança só de altura não mexe em nada.
+  let larguraAntes = innerWidth, eraDesktop = desktop();
   addEventListener('resize', debounce(() => {
-    encaixar();
-    if (desktop() && S.cmdAberta) {
+    if (innerWidth !== larguraAntes) { larguraAntes = innerWidth; encaixar(); }
+    if (desktop() === eraDesktop) return;
+    eraDesktop = desktop();
+    if (eraDesktop && S.cmdAberta) {
       S.cmdAberta = false;
       $('#comanda').classList.remove('on'); $('#veu').classList.remove('on');
       document.body.classList.remove('travado'); $('#aba').classList.remove('some');
