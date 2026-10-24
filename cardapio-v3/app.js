@@ -224,7 +224,7 @@ function candidatosPara(g, max = 4) {
   const lista = [];
   const add = ns => ns.forEach(n => { const r = porNome(n); if (r && !lista.includes(r)) lista.push(r); });
   const contexto = (g.base + ' ' + (g.descricao || '')).toLowerCase();
-  const temArrozSalada = /completa|arroz e salada/.test(contexto);
+  const temArrozSalada = /completa|arroz/.test(contexto); // prato que já vem com arroz (feijoada, completas) não sugere arroz
   const ehArrozOuSalada = /^(arroz|salada)$/i.test(g.base);
   const temBatataNoNome = /batata/i.test(g.base);
 
