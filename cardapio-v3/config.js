@@ -133,6 +133,18 @@ window.CHOPP = {
     'marmitas media e grande': [{ titulo: 'Escolha a carne', rotulo: 'Carne', itens: ['Filé de peito grelhado', 'Filé de tilápia frito', 'Frango chinquim frito', 'Bisteca bovina', 'Bisteca suína'] }],
   },
 
+  // Pratos que vêm só com o que está no nome — sem arroz e salada — e a versão
+  // completa de cada um. Reclamações de 15 e 24/10: "só veio frango", "a picanha
+  // não veio com arroz". O cardápio avisa no prato e oferece o completo.
+  SEM_ARROZ: {
+    'frango frito especial':                         'Combo Frango Frito Especial C/ Arroz E Salada',
+    'combo picanha na chapa com mandioca':           'Combo Picanha Completa Com Salada E Arroz',
+    'combo alcatra na chapa com mandioca e cebola':  'Combo Alcatra Completa Com Mandioca, Arroz E Salada',
+    'combo costelinha de porco com mandioca':        'Combo Costelinha De Porco Completa Com Arroz E Salada',
+    'filé de tilápia':                               'Filé De Tilápia Completa Com Arroz E Salada',
+    'combo filé de tilápia grelhado com alcaparras': 'Combo Filé De Tilápia Grelhado Com Alcaparras Completa',
+  },
+
   // Cross-sell de R$ 10: o molho especial é a 1ª sugestão sempre que entra
   // frango, combo ou porção (no "vai bem junto" e nas sugestões da comanda).
   // Nome tem que ser igual ao do produto no banco.

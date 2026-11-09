@@ -209,6 +209,12 @@ body.com-trilho .trilho { transform: none; }
 .it-desc { margin-top: 6px; font-size: 12.8px; line-height: 1.55; color: var(--cinza-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .it-desc.curto { -webkit-line-clamp: 1; font-size: 12px; color: var(--cinza); }
 .it.aberto .it-desc { -webkit-line-clamp: unset; }
+.it-sem { display: inline-block; margin-top: 8px; padding: 3px 8px; border: 1px dashed var(--verm); color: var(--verm-esc); font-size: 12px; line-height: 1.4; }
+.it-sem b { font-weight: 700; }
+.it-completo { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 52px; margin-top: 12px; padding: 10px 14px; background: var(--ouro-claro); border: 1.5px solid var(--tinta); color: var(--tinta); font-size: 13px; line-height: 1.35; text-align: left; }
+.it-completo b { font-weight: 700; }
+.it-completo span:last-child { font-weight: 700; white-space: nowrap; }
+.it-completo:active { background: var(--ouro); }
 .it-tams { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 9px; font-size: 13.5px; }
 .it-tams span { position: relative; white-space: nowrap; }
 .it-tams span b { font-weight: 700; }
@@ -430,6 +436,7 @@ body.com-trilho .trilho { transform: none; }
 .ck-bump.on { border-style: solid; border-color: var(--verde); background: #EAF5EE; }
 .ck-resumo p { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13px; }
 .ck-resumo p span:last-child { white-space: nowrap; font-weight: 600; }
+.ck-sem { display: block; font-size: 11px; color: var(--verm-esc); }
 /* botão final: diz o que falta; só fica verde quando dá pra enviar */
 .cmd-btn.falta { background: var(--papel-2); color: var(--tinta); border: 1.5px dashed var(--tinta); letter-spacing: .02em; text-transform: none; font-size: 14.5px; }
 .cmd-voltar { font-size: 13px; }

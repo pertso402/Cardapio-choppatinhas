@@ -96,6 +96,18 @@ function limparDesc(desc) {
 }
 const efetivo = r => { const pp = Number(r.preco_promocional); return pp > 0 && pp < Number(r.preco) ? pp : Number(r.preco); };
 const copyDe = g => C.COPY[g.base.toLowerCase()] || C.COPY[g.base.toLowerCase().replace(/^pizza\s+/, '')] || C.COPY_SECAO[g.secao] || '';
+
+// "Só o prato": tem versão completa com arroz e salada (config SEM_ARROZ)
+const semArroz = base => !!C.SEM_ARROZ?.[String(base || '').toLowerCase()];
+const completoDe = g => {
+  const nome = C.SEM_ARROZ?.[g.base.toLowerCase()];
+  return nome ? S.grupos.find(x => x.base.toLowerCase() === nome.toLowerCase() && x.disponivel) || null : null;
+};
+const avisoSemArroz = g => semArroz(g.base) ? '<p class="it-sem">só o prato · <b>não vem arroz nem salada</b></p>' : '';
+function botaoCompleto(g) {
+  const c = completoDe(g);
+  return c ? `<button class="it-completo" data-abre="${esc(c.key)}"><span>Quer com <b>arroz e salada</b>?</span><span>ver o completo · ${fmtMenu(c.min)} →</span></button>` : '';
+}
 const midiaDe = (nome, secao, img) => img
   ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">`
   : window.ChoppArt.svg(nome, secao);
@@ -637,9 +649,10 @@ function itemHTML(g) {
           <span class="prato-preco">${multi ? '<small>a partir</small>' : ''}${fmtMenu(g.min)}</span>
         </div>
         ${desc ? `<p class="it-desc">${esc(desc)}</p>` : ''}
+        ${avisoSemArroz(g)}
         ${tamsHTML(g)}
       </div>
-      ${aberto ? painelHTML(g) : `<button class="prato-cta" ${g.simples ? `data-add="${esc(g.key)}"` : 'data-toque'}>${g.simples ? 'anotar na comanda' : multi ? 'escolher tamanho' : 'escolher'} <span>${g.simples ? '+' : '→'}</span></button>`}
+      ${aberto ? botaoCompleto(g) + painelHTML(g) : `<button class="prato-cta" ${g.simples ? `data-add="${esc(g.key)}"` : 'data-toque'}>${g.simples ? 'anotar na comanda' : multi ? 'escolher tamanho' : 'escolher'} <span>${g.simples ? '+' : '→'}</span></button>`}
     </article>`;
   }
   return `
@@ -650,11 +663,12 @@ function itemHTML(g) {
           <div class="linha-topo"><h3>${esc(g.nome)}</h3>${multi ? '' : `<span class="pontos"></span><b>${fmtMenu(g.min)}</b>`}</div>
           ${nota ? `<p class="linha-nota mao">${esc(nota)}</p>` : ''}
           ${desc ? `<p class="it-desc${bebida ? ' curto' : ''}">${esc(desc)}</p>` : ''}
+          ${avisoSemArroz(g)}
           ${tamsHTML(g)}
         </div>
         ${aberto ? '' : `<div class="it-acao">${acaoHTML(g)}</div>`}
       </div>
-      ${aberto ? painelHTML(g) : ''}
+      ${aberto ? botaoCompleto(g) + painelHTML(g) : ''}
     </article>`;
 }
 
@@ -1118,7 +1132,7 @@ function msgCk(id) {
   const ck = S.ck;
   if (id === 'ckNome') return 'Digite seu nome.';
   if (id === 'ckTel') return ck.tel ? 'Confira o número: precisa ter o DDD, ex.: (44) 99999-9999.' : 'Digite seu WhatsApp com DDD, ex.: (44) 99999-9999.';
-  if (id === 'ckRua') return 'Digite a rua e o número da casa.';
+  if (id === 'ckRua') return ck.rua.trim().length < 4 ? 'Digite a rua e o número da casa.' : 'Faltou o número da casa. Se não tiver, escreva S/N.';
   if (id === 'ckBairro') return 'Digite o bairro.';
   if (id === 'pag') return 'Escolha como você vai pagar.';
   if (id === 'ckTroco') return `Digite um valor maior que o total (${fmt(totais(ck.tipo).total)}).`;
@@ -1128,7 +1142,8 @@ function problemasCk() {
   const ck = S.ck; const p = [];
   if (ck.nome.trim().length < 2) p.push('ckNome');
   const tel = soDigitos(ck.tel); if (tel.length < 10 || tel.length > 11) p.push('ckTel');
-  if (ck.tipo === 'delivery') { if (ck.rua.trim().length < 4) p.push('ckRua'); if (ck.bairro.trim().length < 2) p.push('ckBairro'); }
+  // sem número o motoboy fica rodando: o pedido #88 chegou só com o nome da rua
+  if (ck.tipo === 'delivery') { if (ck.rua.trim().length < 4 || !/\d|\bs\/?n\b/i.test(ck.rua)) p.push('ckRua'); if (ck.bairro.trim().length < 2) p.push('ckBairro'); }
   if (!ck.pag) p.push('pag');
   else if (ck.pag === 'dinheiro' && ck.trocoSim) {
     const v = parseFloat(String(ck.troco).replace(',', '.'));
@@ -1196,7 +1211,7 @@ function cmdCheckout() {
       ${ck.tipo === 'delivery' ? `
         ${campo('ckRua', 'Rua e número', ck.rua, { extra: 'autocomplete="street-address" autocapitalize="words" placeholder="Ex.: Av. Paraná, 1234"' })}
         ${campo('ckBairro', 'Bairro', ck.bairro, { extra: 'autocomplete="address-level3" autocapitalize="words" placeholder="Ex.: Zona III"' })}
-        ${campo('ckComp', 'Complemento', ck.comp, { opcional: true, extra: 'autocomplete="address-line2" autocapitalize="sentences" placeholder="Ex.: Ap. 12, casa dos fundos"' })}`
+        ${campo('ckComp', 'Complemento ou ponto de referência', ck.comp, { opcional: true, extra: 'autocomplete="address-line2" autocapitalize="sentences" placeholder="Ex.: Ap. 12, em frente ao mercado"' })}`
         : `<p class="ck-nota">📍 Retirada em <b>${esc(valido(S.info.endereco) ? S.info.endereco : 'Choppatinhas, Umuarama-PR')}</b></p>`}
     </div>
 
@@ -1223,7 +1238,7 @@ function cmdCheckout() {
 
     <div class="ck-sec">
       <h3 class="ck-tit sem-num"><span>Seu pedido</span></h3>
-      <div class="ck-resumo">${S.carrinho.map(i => `<p><span>${i.qtd}x ${esc(i.titulo)}${i.sub ? ` (${esc(i.sub)})` : ''}</span><span>${fmtNum(i.preco * i.qtd)}</span></p>`).join('')}</div>
+      <div class="ck-resumo">${S.carrinho.map(i => `<p><span>${i.qtd}x ${esc(i.titulo)}${i.sub ? ` (${esc(i.sub)})` : ''}${semArroz(parseNome(i.nomeDb || '').base) ? '<small class="ck-sem">sem arroz e salada</small>' : ''}</span><span>${fmtNum(i.preco * i.qtd)}</span></p>`).join('')}</div>
       ${ck.obsAberta || ck.obs
         ? campo('ckObs', 'Observação', ck.obs, { opcional: true, extra: 'maxlength="200" enterkeyhint="done" autocapitalize="sentences" placeholder="Ex.: sem cebola, interfone com defeito"' })
         : '<button class="ck-mais-obs" data-ck-obs>+ Adicionar observação (opcional)</button>'}
@@ -1405,7 +1420,7 @@ function cmdPix(u) {
  const aguardando = ['em_analise', 'em_conferencia'].includes(u.pixStatus);
  const titulo = u.pixStatus === 'em_analise' ? 'comprovante recebido' : u.pixStatus === 'em_conferencia' ? 'aguardando conferência' : u.pixStatus === 'divergente' ? 'confira o comprovante' : u.pixStatus === 'inconclusivo' ? 'a equipe vai conferir' : 'aguardando seu Pix';
  const motivos = Array.isArray(u.pixResumo?.motivos) ? u.pixResumo.motivos : [];
- const dados = '<p><b>Valor exato: ' + fmt(u.total) + '</b></p><p>Destinatário: ' + esc(u.pixRecebedor || 'Choppatinhas') + '</p><p>CNPJ / chave Pix:</p><p class="pix-chave">' + esc(u.pixChave || S.info.chave_pix || '') + '</p><button class="cmd-btn" data-pix-copiar><span>Copiar chave Pix</span><span>⧉</span></button>';
+ const dados = '<p><b>Valor exato: ' + fmt(u.total) + '</b></p><p>Destinatário: ' + esc(u.pixRecebedor || 'Choppatinhas') + '</p><p>Chave Pix (celular):</p><p class="pix-chave">' + esc(u.pixChave || S.info.chave_pix || '') + '</p><button class="cmd-btn" data-pix-copiar><span>Copiar chave Pix</span><span>⧉</span></button>';
  const corpo = '<div class="st-topo"><p class="cmd-rot">pedido reservado</p><p class="st-num">Nº ' + String(u.numero).padStart(3, '0') + '</p><p class="st-sub">' + fmt(u.total) + '</p><span class="carimbo st-carimbo">' + esc(titulo) + '</span></div>' +
  (recebido ? '<details class="pix-box"><summary>Dados do pagamento para conferência</summary>' + dados + '</details>' : '<div class="pix-box"><p>Faça o Pix no aplicativo do seu banco e anexe o comprovante aqui.</p>' + dados + '</div>') +
  (recebido ? '<p class="ck-nota">' + (u.pixStatus === 'em_conferencia' ? 'Os dados estão compatíveis com o pedido. Falta a equipe confirmar o recebimento na conta.' : u.pixStatus === 'em_analise' ? 'O agente está comparando o arquivo com o seu pedido. Você pode sair desta tela e voltar depois.' : 'A equipe pode ajudar na conferência. Você também pode reenviar um arquivo legível.') + ' Se já pagou, não repita o Pix.</p>' : '') +
