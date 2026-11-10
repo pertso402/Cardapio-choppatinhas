@@ -1186,7 +1186,7 @@ function cmdCheckout() {
   const bump = ck.bumpPid && S.porId.get(ck.bumpPid);
   const bi = bump && parseNome(bump.nome);
   const pags = [
-    { k: 'pix', t: 'PIX', d: S.info.pix_habilitado === 'true' ? 'pagar e enviar comprovante' : `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
+    { k: 'pix', t: 'PIX', d: S.info.pix_habilitado === 'true' ? 'pagar e enviar comprovante' : valido(S.info.chave_pix) ? 'chave aparece ao enviar o pedido' : `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'dinheiro', t: 'Dinheiro', d: `na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'cartao_credito', t: 'Cartão de crédito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
     { k: 'cartao_debito', t: 'Cartão de débito', d: `maquininha na ${ck.tipo === 'retirada' ? 'retirada' : 'entrega'}` },
@@ -1448,6 +1448,34 @@ async function retomarPixDoLink() {
  catch{toast('Não foi possível abrir o pedido. Confira o link ou fale com a casa.','erro');}
 }
 
+// Pedido em Pix sem o "Pix com comprovante" ligado: antes a tela dizia só
+// "pagamento na entrega" e o cliente ia pedir a chave no WhatsApp.
+const pixNaChave = u => u.pag === 'pix' && u.pixStatus !== 'confirmado' && S.info.pix_habilitado !== 'true' && valido(S.info.chave_pix);
+// O navegador interno do WhatsApp (por onde chega a maioria dos clientes)
+// costuma bloquear navigator.clipboard; o execCommand ainda funciona ali.
+async function copiarTexto(txt) {
+  if (!txt) return false;
+  try { await navigator.clipboard.writeText(txt); return true; } catch { /* tenta o método antigo */ }
+  try {
+    const t = document.createElement('textarea');
+    t.value = txt; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, txt.length);
+    const ok = document.execCommand('copy'); t.remove(); return ok;
+  } catch { return false; }
+}
+function pixChaveHTML(u) {
+  const titular = valido(S.info.pix_titular) ? S.info.pix_titular : '';
+  return `
+    <div class="st-pag">
+      <p class="cmd-rot">pague no Pix</p>
+      <p>valor: <b>${fmt(u.total)}</b></p>
+      <p>Chave Pix${/^\d{10,11}$/.test(soDigitos(S.info.chave_pix)) && soDigitos(S.info.chave_pix).length === String(S.info.chave_pix).trim().length ? ' (celular)' : ''}:</p>
+      <p class="pix-chave">${esc(S.info.chave_pix)}</p>
+      ${titular ? `<p>Titular: <b>${esc(titular)}</b></p>` : ''}
+      <button class="cmd-btn" data-pix-copiar><span>Copiar chave Pix</span><span>⧉</span></button>
+      <p>Depois mande o comprovante no nosso WhatsApp. Se preferir, pague na ${u.tipo === 'retirada' ? 'retirada' : 'entrega'}.</p>
+    </div>`;
+}
 function cmdStatus() {
   const u = S.ult;
   if (u.status === 'aguardando_pix') return cmdPix(u);
@@ -1466,7 +1494,8 @@ function cmdStatus() {
     ${et < 0 ? '<p class="st-cancel">Este pedido foi cancelado pela casa. Fale com a gente no WhatsApp se tiver dúvida.</p>' : `
     <ol class="st-etapas">${etapas.map((e, i) => `<li class="${i < et || et === 3 ? 'feito' : i === et ? 'agora' : ''}"><i class="caixa"></i><span><b>${esc(e.t)}</b><small>${esc(e.d)}</small></span></li>`).join('')}</ol>
     ${et < 3 ? `<p class="st-prev mao">${u.tipo === 'delivery' ? `previsão: ${C.DEFAULTS.tempo_entrega}` : `fica pronto em ${C.DEFAULTS.tempo_retirada}`}</p>` : ''}`}
-    ${et >= 0 ? `
+    ${et >= 0 && pixNaChave(u) ? pixChaveHTML(u) : ''}
+    ${et >= 0 && !pixNaChave(u) ? `
     <div class="st-pag">
       <p class="cmd-rot">${u.pixStatus === 'confirmado' ? 'Pix conferido pela equipe' : 'pagamento na ' + (u.tipo === 'retirada' ? 'retirada' : 'entrega')}</p>
       <p>${u.pixStatus === 'confirmado' ? 'Recebimento confirmado. Seu pedido segue no atendimento.' : 'Você paga quando ' + (u.tipo === 'retirada' ? 'retirar o pedido na casa' : 'receber o pedido') + '.'}</p>
@@ -1906,7 +1935,7 @@ function fonteDe(el) { return el.closest('.capa') ? 'destaque' : el.closest('.ra
 function eventos() {
   document.addEventListener('click', e => { if (e.target.closest('[data-pix-anexar]')) $('#pixArquivo')?.click(); });
   document.addEventListener('change', e => { if (e.target.id === 'pixArquivo') enviarComprovantePix(e.target.files?.[0]); });
-  document.addEventListener('click', async e => { if (e.target.closest('[data-pix-copiar]')) { try { await navigator.clipboard.writeText(S.ult?.pixChave || S.info.chave_pix || ''); toast('Chave Pix copiada', 'ok'); } catch { toast('Selecione e copie a chave Pix exibida na tela.'); } } });
+  document.addEventListener('click', async e => { if (e.target.closest('[data-pix-copiar]')) { (await copiarTexto(S.ult?.pixChave || S.info.chave_pix || '')) ? toast('Chave Pix copiada', 'ok') : toast('Toque na chave para selecionar e copie.'); } });
   const abrirBusca = () => { $('#busca').hidden = false; $('#buscaInput').focus(); };
   const fecharBusca = () => { $('#busca').hidden = true; $('#buscaInput').value = ''; S.busca = ''; renderMenu(); };
   $('#btnBusca').addEventListener('click', () => ($('#busca').hidden ? abrirBusca() : fecharBusca()));
